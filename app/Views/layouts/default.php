@@ -3,35 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="<?= e(APP_FULL_NAME) ?> - ANPE Niger">
+    <meta name="description" content="<?= e(APP_FULL_NAME) ?> — ANPE Niger">
     <meta name="robots" content="noindex, nofollow">
-    <title><?= e($pageTitle ?? APP_NAME) ?></title>
-    
+    <title><?= e($pageTitle ?? APP_NAME) ?> — e-DAMO</title>
+
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="/assets/img/favicon.ico">
-    
+    <link rel="icon" type="image/png" href="<?= asset('img/favicon.ico') ?>">
     <!-- Bootstrap 5 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- CSS principal -->
-    <link rel="stylesheet" href="/assets/css/main.css">
-    <link rel="stylesheet" href="/assets/css/admin.css">
-    
+    <!-- CSS -->
+    <link rel="stylesheet" href="<?= asset('css/main.css') ?>">
+    <link rel="stylesheet" href="<?= asset('css/admin.css') ?>">
+
     <?php if (isset($extraCss)): foreach ($extraCss as $css): ?>
     <link rel="stylesheet" href="<?= e($css) ?>">
     <?php endforeach; endif; ?>
 </head>
 <body class="admin-layout sidebar-mini">
 
-<!-- Sidebar -->
+<?php
+// Chemin courant sans BASE_PATH pour les comparaisons actif/inactif
+$_cp = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$_bp = defined('BASE_PATH') ? BASE_PATH : '';
+if ($_bp && str_starts_with($_cp, $_bp)) $_cp = substr($_cp, strlen($_bp));
+$_cp = '/' . ltrim($_cp, '/');
+function _nav_active(string $prefix): string {
+    global $_cp;
+    return str_starts_with($_cp, $prefix) ? 'active' : '';
+}
+?>
+
+<!-- ===== SIDEBAR ===== -->
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-        <img src="/assets/img/logo-anpe.png" alt="ANPE Niger" class="sidebar-logo">
+        <img src="<?= asset('img/logo-anpe.png') ?>" alt="ANPE Niger" class="sidebar-logo">
         <div class="sidebar-brand-text">
             <span class="brand-name">e-DAMO</span>
             <small class="brand-sub">ANPE Niger</small>
@@ -60,96 +69,74 @@
 
     <nav class="sidebar-nav">
         <?php if (isAdmin()): ?>
-        <!-- Menu Administration -->
-        <div class="nav-section">
-            <span class="nav-section-title">Administration</span>
-        </div>
-        <a href="/admin/dashboard" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/dashboard') !== false ? 'active' : '' ?>">
-            <i class="bi bi-speedometer2"></i>
-            <span>Tableau de bord</span>
+        <div class="nav-section"><span class="nav-section-title">Administration</span></div>
+
+        <a href="<?= url('admin/dashboard') ?>" class="nav-item <?= _nav_active('/admin/dashboard') ?>">
+            <i class="bi bi-speedometer2"></i><span>Tableau de bord</span>
         </a>
-        <a href="/admin/declarations" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/declarations') !== false ? 'active' : '' ?>">
-            <i class="bi bi-file-earmark-text"></i>
-            <span>Déclarations</span>
-            <?php 
-            $pendingCount = \App\Models\Database::getInstance()->fetchScalar(
-                "SELECT COUNT(*) FROM declarations WHERE statut = 'soumise'"
-            );
-            if ($pendingCount > 0): ?>
-            <span class="nav-badge"><?= $pendingCount ?></span>
-            <?php endif; ?>
+        <a href="<?= url('admin/declarations') ?>" class="nav-item <?= _nav_active('/admin/declarations') ?>">
+            <i class="bi bi-file-earmark-text"></i><span>Déclarations</span>
+            <?php
+            try {
+                $pendingCount = \App\Models\Database::getInstance()->fetchScalar(
+                    "SELECT COUNT(*) FROM declarations WHERE statut = 'soumise'"
+                );
+                if ($pendingCount > 0): ?>
+                <span class="nav-badge"><?= $pendingCount ?></span>
+            <?php endif; } catch(\Exception $e) {} ?>
         </a>
-        <a href="/admin/statistiques" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/statistiques') !== false ? 'active' : '' ?>">
-            <i class="bi bi-bar-chart-line"></i>
-            <span>Statistiques</span>
+        <a href="<?= url('admin/statistiques') ?>" class="nav-item <?= _nav_active('/admin/statistiques') ?>">
+            <i class="bi bi-bar-chart-line"></i><span>Statistiques</span>
         </a>
 
-        <div class="nav-section">
-            <span class="nav-section-title">Gestion</span>
-        </div>
-        <a href="/admin/utilisateurs" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/utilisateurs') !== false ? 'active' : '' ?>">
-            <i class="bi bi-people"></i>
-            <span>Utilisateurs</span>
+        <div class="nav-section"><span class="nav-section-title">Gestion</span></div>
+
+        <a href="<?= url('admin/utilisateurs') ?>" class="nav-item <?= _nav_active('/admin/utilisateurs') ?>">
+            <i class="bi bi-people"></i><span>Utilisateurs</span>
         </a>
-        <a href="/admin/campagnes" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/campagnes') !== false ? 'active' : '' ?>">
-            <i class="bi bi-calendar3"></i>
-            <span>Campagnes DAMO</span>
+        <a href="<?= url('admin/campagnes') ?>" class="nav-item <?= _nav_active('/admin/campagnes') ?>">
+            <i class="bi bi-calendar3"></i><span>Campagnes DAMO</span>
         </a>
-        <a href="/admin/branches" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/branches') !== false ? 'active' : '' ?>">
-            <i class="bi bi-diagram-3"></i>
-            <span>Branches d'activité</span>
+        <a href="<?= url('admin/branches') ?>" class="nav-item <?= _nav_active('/admin/branches') ?>">
+            <i class="bi bi-diagram-3"></i><span>Branches d'activité</span>
         </a>
-        <a href="/admin/guides" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/guides') !== false ? 'active' : '' ?>">
-            <i class="bi bi-book"></i>
-            <span>Guides & Documents</span>
+        <a href="<?= url('admin/guides') ?>" class="nav-item <?= _nav_active('/admin/guides') ?>">
+            <i class="bi bi-book"></i><span>Guides & Documents</span>
         </a>
-        <a href="/admin/parametres" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/parametres') !== false ? 'active' : '' ?>">
-            <i class="bi bi-gear"></i>
-            <span>Paramètres</span>
+        <a href="<?= url('admin/parametres') ?>" class="nav-item <?= _nav_active('/admin/parametres') ?>">
+            <i class="bi bi-gear"></i><span>Paramètres</span>
         </a>
-        <a href="/admin/logs" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/admin/logs') !== false ? 'active' : '' ?>">
-            <i class="bi bi-journal-text"></i>
-            <span>Journaux d'audit</span>
+        <a href="<?= url('admin/logs') ?>" class="nav-item <?= _nav_active('/admin/logs') ?>">
+            <i class="bi bi-journal-text"></i><span>Journaux d'audit</span>
         </a>
         <?php endif; ?>
 
         <?php if (isAgent()): ?>
-        <!-- Menu Agent -->
-        <div class="nav-section">
-            <span class="nav-section-title">Saisie DAMO</span>
-        </div>
-        <a href="/agent/dashboard" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/agent/dashboard') !== false ? 'active' : '' ?>">
-            <i class="bi bi-speedometer2"></i>
-            <span>Mon tableau de bord</span>
+        <div class="nav-section"><span class="nav-section-title">Saisie DAMO</span></div>
+
+        <a href="<?= url('agent/dashboard') ?>" class="nav-item <?= _nav_active('/agent/dashboard') ?>">
+            <i class="bi bi-speedometer2"></i><span>Mon tableau de bord</span>
         </a>
-        <a href="/agent/declarations" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/agent/declarations') !== false ? 'active' : '' ?>">
-            <i class="bi bi-file-earmark-text"></i>
-            <span>Mes déclarations</span>
+        <a href="<?= url('agent/declarations') ?>" class="nav-item <?= _nav_active('/agent/declarations') ?>">
+            <i class="bi bi-file-earmark-text"></i><span>Mes déclarations</span>
         </a>
-        <a href="/agent/entreprises" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/agent/entreprises') !== false ? 'active' : '' ?>">
-            <i class="bi bi-building"></i>
-            <span>Entreprises</span>
+        <a href="<?= url('agent/entreprises') ?>" class="nav-item <?= _nav_active('/agent/entreprises') ?>">
+            <i class="bi bi-building"></i><span>Entreprises</span>
         </a>
-        <a href="/guides" class="nav-item">
-            <i class="bi bi-book"></i>
-            <span>Guides de saisie</span>
+        <a href="<?= url('guides') ?>" class="nav-item">
+            <i class="bi bi-book"></i><span>Guides de saisie</span>
         </a>
         <?php endif; ?>
 
-        <div class="nav-section">
-            <span class="nav-section-title">Compte</span>
-        </div>
-        <a href="/profil" class="nav-item <?= strpos($_SERVER['REQUEST_URI'], '/profil') !== false ? 'active' : '' ?>">
-            <i class="bi bi-person-circle"></i>
-            <span>Mon profil</span>
+        <div class="nav-section"><span class="nav-section-title">Compte</span></div>
+        <a href="<?= url('profil') ?>" class="nav-item <?= _nav_active('/profil') ?>">
+            <i class="bi bi-person-circle"></i><span>Mon profil</span>
         </a>
-        <a href="/accueil" class="nav-item" target="_blank">
-            <i class="bi bi-globe"></i>
-            <span>Site public</span>
+        <a href="<?= url('accueil') ?>" class="nav-item" target="_blank" rel="noopener">
+            <i class="bi bi-globe"></i><span>Site public</span>
         </a>
-        <a href="/logout" class="nav-item text-danger">
-            <i class="bi bi-box-arrow-right"></i>
-            <span>Déconnexion</span>
+        <a href="<?= url('logout') ?>" class="nav-item text-danger">
+            <i class="bi bi-box-arrow-right"></i><span>Déconnexion</span>
         </a>
     </nav>
 </aside>
@@ -157,8 +144,9 @@
 <!-- Overlay mobile -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-<!-- Contenu principal -->
+<!-- ===== CONTENU PRINCIPAL ===== -->
 <div class="main-wrapper">
+
     <!-- Topbar -->
     <header class="topbar">
         <div class="topbar-left">
@@ -180,52 +168,64 @@
         <div class="topbar-right">
             <!-- Notifications -->
             <div class="dropdown">
-                <button class="topbar-btn" data-bs-toggle="dropdown" id="notifBtn">
+                <button class="topbar-btn" data-bs-toggle="dropdown" id="notifBtn" title="Notifications">
                     <i class="bi bi-bell"></i>
                     <span class="topbar-badge" id="notifCount" style="display:none">0</span>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end notif-dropdown" id="notifDropdown">
                     <div class="notif-header">
                         <strong>Notifications</strong>
-                        <a href="#" class="mark-all-read">Tout lire</a>
+                        <a href="#" class="mark-all-read small">Tout lire</a>
                     </div>
                     <div class="notif-list" id="notifList">
-                        <p class="text-center text-muted p-3">Aucune notification</p>
+                        <p class="text-center text-muted p-3 mb-0">Aucune notification</p>
                     </div>
                 </div>
             </div>
-            
-            <!-- Utilisateur -->
+
+            <!-- Utilisateur dropdown -->
             <div class="dropdown">
                 <button class="topbar-user" data-bs-toggle="dropdown">
                     <div class="user-avatar-sm">
                         <?= strtoupper(substr(currentUser()['prenom'] ?? 'U', 0, 1) . substr(currentUser()['nom'] ?? '', 0, 1)) ?>
                     </div>
-                    <span class="d-none d-md-inline"><?= e(currentUser()['prenom'] ?? '') ?></span>
-                    <i class="bi bi-chevron-down"></i>
+                    <span class="d-none d-md-inline fw-500"><?= e(currentUser()['prenom'] ?? '') ?></span>
+                    <i class="bi bi-chevron-down" style="font-size:.7rem"></i>
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="/profil"><i class="bi bi-person me-2"></i>Mon profil</a></li>
+                <ul class="dropdown-menu dropdown-menu-end shadow">
+                    <li>
+                        <a class="dropdown-item" href="<?= url('profil') ?>">
+                            <i class="bi bi-person-circle me-2 text-primary"></i>Mon profil
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="<?= url('accueil') ?>" target="_blank">
+                            <i class="bi bi-globe me-2 text-info"></i>Site public
+                        </a>
+                    </li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right me-2"></i>Déconnexion</a></li>
+                    <li>
+                        <a class="dropdown-item text-danger" href="<?= url('logout') ?>">
+                            <i class="bi bi-box-arrow-right me-2"></i>Déconnexion
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>
     </header>
 
-    <!-- Contenu de la page -->
+    <!-- Page content -->
     <main class="page-content">
-        <!-- Messages Flash -->
         <?php if ($flash): ?>
         <div class="flash-container">
-            <div class="alert alert-<?= $flash['type'] === 'error' ? 'danger' : $flash['type'] ?> alert-dismissible fade show" role="alert">
+            <div class="alert alert-<?= $flash['type'] === 'error' ? 'danger' : e($flash['type']) ?> alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
                 <i class="bi bi-<?= match($flash['type']) {
-                    'success' => 'check-circle',
-                    'error', 'danger' => 'exclamation-triangle',
-                    'warning' => 'exclamation-circle',
-                    default => 'info-circle'
-                } ?> me-2"></i>
-                <?= e($flash['message']) ?>
+                    'success'         => 'check-circle-fill',
+                    'error','danger'  => 'exclamation-triangle-fill',
+                    'warning'         => 'exclamation-circle-fill',
+                    default           => 'info-circle-fill'
+                } ?>"></i>
+                <div class="flex-1"><?= e($flash['message']) ?></div>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         </div>
@@ -235,7 +235,7 @@
     </main>
 
     <footer class="page-footer">
-        <span>© <?= date('Y') ?> <?= APP_NAME ?> - ANPE Niger | <?= APP_FULL_NAME ?></span>
+        <span>© <?= date('Y') ?> <?= APP_NAME ?> — ANPE Niger</span>
         <span>Version <?= APP_VERSION ?></span>
     </footer>
 </div>
@@ -244,16 +244,14 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
-<script src="/assets/js/main.js"></script>
-
+<script>
+window.CSRF_TOKEN = '<?= csrfToken() ?>';
+window.APP_URL    = '<?= APP_URL ?>';
+window.APP_BASE   = '<?= defined('BASE_PATH') ? BASE_PATH : '' ?>';
+</script>
+<script src="<?= asset('js/main.js') ?>"></script>
 <?php if (isset($extraJs)): foreach ($extraJs as $js): ?>
 <script src="<?= e($js) ?>"></script>
 <?php endforeach; endif; ?>
-
-<script>
-// Token CSRF pour les requêtes AJAX
-const CSRF_TOKEN = '<?= csrfToken() ?>';
-const APP_URL    = '<?= APP_URL ?>';
-</script>
 </body>
 </html>

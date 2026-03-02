@@ -5,6 +5,30 @@
 defined('EDAMO') or die('Accès direct interdit');
 
 /**
+ * Retourne l'URL complète en préfixant BASE_PATH
+ * url('login')          → /anpe_DAMO/login
+ * url('/admin/users')   → /anpe_DAMO/admin/users
+ * url('')               → /anpe_DAMO/
+ */
+function url(string $path = ''): string
+{
+    $base = defined('BASE_PATH') ? BASE_PATH : '';
+    $path = ltrim($path, '/');
+    return $base . '/' . $path;
+}
+
+/**
+ * Retourne l'URL d'un asset statique (CSS, JS, images)
+ * asset('css/main.css') → /anpe_DAMO/assets/css/main.css
+ */
+function asset(string $path): string
+{
+    $base = defined('BASE_PATH') ? BASE_PATH : '';
+    $path = ltrim($path, '/');
+    return $base . '/assets/' . $path;
+}
+
+/**
  * Escape HTML pour prévenir XSS
  */
 function e(mixed $value): string

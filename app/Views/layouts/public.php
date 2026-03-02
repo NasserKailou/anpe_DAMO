@@ -3,129 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="e-DAMO - Déclaration Annuelle de la Main d'Œuvre en ligne - ANPE Niger">
-    <title><?= e($pageTitle ?? APP_NAME) ?></title>
-    <link rel="icon" type="image/png" href="/assets/img/favicon.ico">
+    <meta name="description" content="e-DAMO — Déclaration Annuelle de la Main d'Œuvre — ANPE Niger">
+    <title><?= e($pageTitle ?? APP_NAME) ?> — e-DAMO</title>
+    <link rel="icon" type="image/png" href="<?= asset('img/favicon.ico') ?>">
+
+    <!-- Bootstrap 5 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/assets/css/main.css">
-    <link rel="stylesheet" href="/assets/css/public.css">
+    <!-- CSS -->
+    <link rel="stylesheet" href="<?= asset('css/main.css') ?>">
+    <link rel="stylesheet" href="<?= asset('css/public.css') ?>">
 </head>
 <body class="public-layout">
 
-<!-- Navigation -->
-<nav class="public-navbar sticky-top">
-    <div class="container">
-        <div class="d-flex align-items-center justify-content-between">
-            <a href="/accueil" class="navbar-brand-pub d-flex align-items-center gap-2 text-decoration-none">
-                <img src="/assets/img/logo-anpe.png" alt="ANPE" style="width:44px;height:44px;border-radius:50%;background:#fff;padding:3px">
-                <div>
-                    <span class="d-block text-white fw-bold fs-5">e-DAMO</span>
-                    <small class="text-white-50 d-none d-md-block">ANPE Niger</small>
-                </div>
-            </a>
-            
-            <div class="d-flex align-items-center gap-3">
-                <nav class="d-none d-lg-flex gap-1">
-                    <a href="/accueil" class="nav-pub-link <?= $_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '/accueil' ? 'active' : '' ?>">
-                        <i class="bi bi-house me-1"></i>Accueil
-                    </a>
-                    <a href="/statistiques" class="nav-pub-link <?= strpos($_SERVER['REQUEST_URI'], '/statistiques') !== false ? 'active' : '' ?>">
-                        <i class="bi bi-bar-chart me-1"></i>Statistiques
-                    </a>
-                    <a href="/donnees" class="nav-pub-link <?= strpos($_SERVER['REQUEST_URI'], '/donnees') !== false ? 'active' : '' ?>">
-                        <i class="bi bi-database me-1"></i>Données
-                    </a>
-                    <a href="/guides" class="nav-pub-link <?= strpos($_SERVER['REQUEST_URI'], '/guides') !== false ? 'active' : '' ?>">
-                        <i class="bi bi-book me-1"></i>Guides
-                    </a>
-                </nav>
+<?php
+// Déterminer la page courante (sans BASE_PATH) pour le menu actif
+$_currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$_bp = defined('BASE_PATH') ? BASE_PATH : '';
+if ($_bp && str_starts_with($_currentPath, $_bp)) {
+    $_currentPath = substr($_currentPath, strlen($_bp));
+}
+$_currentPath = '/' . ltrim($_currentPath, '/');
+?>
 
+<!-- ===== NAVBAR ===== -->
+<nav class="pub-navbar navbar navbar-expand-lg sticky-top">
+    <div class="container">
+
+        <!-- Logo + Titre -->
+        <a href="<?= url('accueil') ?>" class="navbar-brand d-flex align-items-center gap-2 text-decoration-none">
+            <div class="pub-logo-wrap">
+                <img src="<?= asset('img/logo-anpe.png') ?>" alt="ANPE Niger">
+            </div>
+            <div class="lh-1">
+                <span class="pub-brand-title">e-DAMO</span>
+                <span class="pub-brand-sub d-none d-md-block">ANPE Niger</span>
+            </div>
+        </a>
+
+        <!-- Toggler mobile -->
+        <button class="navbar-toggler pub-toggler" type="button"
+                data-bs-toggle="collapse" data-bs-target="#pubNavMenu"
+                aria-expanded="false" aria-label="Menu">
+            <i class="bi bi-list"></i>
+        </button>
+
+        <!-- Menu -->
+        <div class="collapse navbar-collapse" id="pubNavMenu">
+            <ul class="navbar-nav mx-auto gap-1">
+                <li class="nav-item">
+                    <a href="<?= url('accueil') ?>"
+                       class="pub-nav-link <?= in_array($_currentPath, ['/', '/accueil']) ? 'active' : '' ?>">
+                        <i class="bi bi-house-fill"></i><span>Accueil</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="<?= url('statistiques') ?>"
+                       class="pub-nav-link <?= str_starts_with($_currentPath, '/statistiques') ? 'active' : '' ?>">
+                        <i class="bi bi-bar-chart-fill"></i><span>Statistiques</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="<?= url('donnees') ?>"
+                       class="pub-nav-link <?= str_starts_with($_currentPath, '/donnees') ? 'active' : '' ?>">
+                        <i class="bi bi-database-fill"></i><span>Données</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="<?= url('guides') ?>"
+                       class="pub-nav-link <?= str_starts_with($_currentPath, '/guides') ? 'active' : '' ?>">
+                        <i class="bi bi-book-fill"></i><span>Guides</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="d-flex align-items-center gap-2">
                 <?php if (isAuthenticated()): ?>
-                <a href="<?= isAdmin() ? '/admin/dashboard' : '/agent/dashboard' ?>" class="btn btn-warning btn-sm fw-bold">
-                    <i class="bi bi-grid me-1"></i>Mon espace
+                <a href="<?= url(isAdmin() ? 'admin/dashboard' : 'agent/dashboard') ?>"
+                   class="btn btn-warning btn-sm fw-bold px-3">
+                    <i class="bi bi-grid-fill me-1"></i>Mon espace
                 </a>
                 <?php else: ?>
-                <a href="/login" class="btn btn-outline-light btn-sm">
+                <a href="<?= url('login') ?>" class="btn pub-btn-login btn-sm">
                     <i class="bi bi-box-arrow-in-right me-1"></i>Connexion
                 </a>
                 <?php endif; ?>
-
-                <!-- Menu mobile -->
-                <button class="d-lg-none btn btn-outline-light btn-sm" data-bs-toggle="collapse" data-bs-target="#mobileMenu">
-                    <i class="bi bi-list"></i>
-                </button>
             </div>
         </div>
 
-        <!-- Menu mobile -->
-        <div class="collapse d-lg-none" id="mobileMenu">
-            <div class="py-2 border-top border-white-50 mt-2 d-flex flex-column gap-1">
-                <a href="/accueil" class="nav-pub-link">Accueil</a>
-                <a href="/statistiques" class="nav-pub-link">Statistiques</a>
-                <a href="/donnees" class="nav-pub-link">Données</a>
-                <a href="/guides" class="nav-pub-link">Guides</a>
-            </div>
-        </div>
     </div>
 </nav>
 
-<!-- Contenu -->
+<!-- ===== CONTENU ===== -->
 <main>
     <?= $content ?>
 </main>
 
-<!-- Pied de page -->
+<!-- ===== FOOTER ===== -->
 <footer class="pub-footer">
     <div class="container">
         <div class="row g-4">
+
+            <!-- Bloc ANPE -->
             <div class="col-md-4">
-                <div class="d-flex align-items-center gap-2 mb-3">
-                    <img src="/assets/img/logo-anpe.png" alt="ANPE Niger" style="width:50px;height:50px;border-radius:50%;background:#fff;padding:4px">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="pub-footer-logo">
+                        <img src="<?= asset('img/logo-anpe.png') ?>" alt="ANPE Niger">
+                    </div>
                     <div>
                         <div class="text-white fw-bold">ANPE Niger</div>
                         <small class="text-white-50">Agence Nationale pour la Promotion de l'Emploi</small>
                     </div>
                 </div>
-                <p class="text-white-50 small">
-                    Plateforme officielle de Déclaration Annuelle de la Main d'Œuvre (DAMO) du Niger.
+                <p class="text-white-50 small lh-base">
+                    Plateforme officielle de Déclaration Annuelle<br>de la Main d'Œuvre (DAMO) du Niger.
                 </p>
             </div>
+
+            <!-- Liens rapides -->
             <div class="col-md-4">
-                <h6 class="text-white fw-bold mb-3">Liens rapides</h6>
+                <h6 class="text-white fw-bold mb-3 text-uppercase" style="letter-spacing:.5px;font-size:.82rem">
+                    <i class="bi bi-link-45deg me-1"></i>Liens rapides
+                </h6>
                 <ul class="list-unstyled">
-                    <li><a href="/statistiques" class="footer-link"><i class="bi bi-bar-chart me-1"></i>Statistiques</a></li>
-                    <li><a href="/donnees" class="footer-link"><i class="bi bi-database me-1"></i>Données ouvertes</a></li>
-                    <li><a href="/guides" class="footer-link"><i class="bi bi-book me-1"></i>Guides de remplissage</a></li>
-                    <li><a href="/login" class="footer-link"><i class="bi bi-lock me-1"></i>Espace agents / admin</a></li>
+                    <li><a href="<?= url('statistiques') ?>" class="pub-footer-link"><i class="bi bi-bar-chart me-2"></i>Statistiques nationales</a></li>
+                    <li><a href="<?= url('donnees') ?>"      class="pub-footer-link"><i class="bi bi-database me-2"></i>Données ouvertes</a></li>
+                    <li><a href="<?= url('guides') ?>"       class="pub-footer-link"><i class="bi bi-book me-2"></i>Guides de remplissage</a></li>
+                    <li><a href="<?= url('login') ?>"        class="pub-footer-link"><i class="bi bi-lock me-2"></i>Espace agents / admin</a></li>
                 </ul>
             </div>
+
+            <!-- Contact -->
             <div class="col-md-4">
-                <h6 class="text-white fw-bold mb-3">Contact</h6>
+                <h6 class="text-white fw-bold mb-3 text-uppercase" style="letter-spacing:.5px;font-size:.82rem">
+                    <i class="bi bi-geo-alt me-1"></i>Contact
+                </h6>
                 <ul class="list-unstyled text-white-50 small">
-                    <li><i class="bi bi-geo-alt me-2"></i>BP 13 222 NIAMEY – NIGER</li>
-                    <li><i class="bi bi-telephone me-2"></i>Tél: 20 73 33 84</li>
-                    <li><i class="bi bi-telephone-forward me-2"></i>Tél/Fax: 20 73 70 31</li>
-                    <li><i class="bi bi-envelope me-2"></i>anpe-niger16@gmail.com</li>
-                    <li><i class="bi bi-globe me-2"></i><a href="https://www.anpe-niger.ne" class="text-white-50">www.anpe-niger.ne</a></li>
+                    <li class="mb-1"><i class="bi bi-geo-alt-fill me-2 text-warning"></i>BP 13 222 NIAMEY — NIGER</li>
+                    <li class="mb-1"><i class="bi bi-telephone-fill me-2 text-warning"></i>+227 20 73 33 84</li>
+                    <li class="mb-1"><i class="bi bi-telephone-forward-fill me-2 text-warning"></i>Fax: +227 20 73 70 31</li>
+                    <li class="mb-1"><i class="bi bi-envelope-fill me-2 text-warning"></i>anpe-niger16@gmail.com</li>
+                    <li><i class="bi bi-globe me-2 text-warning"></i>
+                        <a href="https://www.anpe-niger.ne" target="_blank" rel="noopener" class="text-white-50 text-decoration-none">www.anpe-niger.ne</a>
+                    </li>
                 </ul>
             </div>
+
         </div>
-        <hr class="border-white-50">
-        <div class="d-flex flex-wrap justify-content-between text-white-50 small">
-            <span>© <?= date('Y') ?> e-DAMO - ANPE Niger. Tous droits réservés.</span>
-            <span>Version <?= APP_VERSION ?> | <?= APP_FULL_NAME ?></span>
+        <hr class="border-white-50 my-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center text-white-50 small gap-2">
+            <span>© <?= date('Y') ?> e-DAMO — ANPE Niger. Tous droits réservés.</span>
+            <span class="d-flex align-items-center gap-1">
+                <i class="bi bi-shield-check text-success"></i>
+                Version <?= APP_VERSION ?> — <?= APP_FULL_NAME ?>
+            </span>
         </div>
     </div>
 </footer>
 
+<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="/assets/js/main.js"></script>
 <script>
-window.APP_URL = '<?= APP_URL ?>';
+window.APP_BASE = '<?= defined('BASE_PATH') ? BASE_PATH : '' ?>';
+window.APP_URL  = '<?= APP_URL ?>';
 </script>
+<script src="<?= asset('js/main.js') ?>"></script>
 <?php if (isset($extraJs)): foreach ($extraJs as $js): ?>
 <script src="<?= e($js) ?>"></script>
 <?php endforeach; endif; ?>
