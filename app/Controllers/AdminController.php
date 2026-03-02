@@ -87,41 +87,45 @@ class AdminController extends BaseController
         $campagne = get('campagne', '');
         $search   = get('q', '');
 
-        // Construction dynamique de la clause WHERE (placeholders ? pour PDO)
+        // Construction dynamique avec placeholders $1,$2,... (PostgreSQL natif)
         $where  = ['1=1'];
         $params = [];
+        $idx    = 1;
 
         if ($statut) {
-            $where[] = "d.statut = ?";
+            $where[] = "d.statut = \$$idx";
             $params[] = $statut;
+            $idx++;
         }
         if ($region) {
-            $where[] = "d.region_id = ?";
+            $where[] = "d.region_id = \$$idx";
             $params[] = (int) $region;
+            $idx++;
         }
         if ($campagne) {
-            $where[] = "d.campagne_id = ?";
+            $where[] = "d.campagne_id = \$$idx";
             $params[] = (int) $campagne;
+            $idx++;
         }
         if ($search) {
-            // Chaque ILIKE a son propre ? et son propre paramètre
-            $where[] = "(e.raison_sociale ILIKE ? OR e.numero_cnss ILIKE ? OR d.code_questionnaire ILIKE ?)";
+            $where[] = "(e.raison_sociale ILIKE \$$idx OR e.numero_cnss ILIKE \$$idx OR d.code_questionnaire ILIKE \$$idx)";
             $params[] = "%$search%";
-            $params[] = "%$search%";
-            $params[] = "%$search%";
+            $idx++;
         }
 
         $whereClause = implode(' AND ', $where);
 
-        $total = (int) $this->db->fetchScalarRaw(
-            "SELECT COUNT(*) FROM declarations d JOIN entreprises e ON e.id = d.entreprise_id WHERE $whereClause",
+        $total = (int) $this->db->fetchAll(
+            "SELECT COUNT(*) AS cnt FROM declarations d JOIN entreprises e ON e.id = d.entreprise_id WHERE $whereClause",
             $params
-        );
+        )[0]['cnt'] ?? 0;
 
         $pagination = $this->paginate($total);
 
         $paramsPage = array_merge($params, [$pagination['per_page'], $pagination['offset']]);
-        $declarations = $this->db->fetchAllRaw(
+        $limitIdx   = $idx;
+        $offsetIdx  = $idx + 1;
+        $declarations = $this->db->fetchAll(
             "SELECT d.*, e.raison_sociale, e.numero_cnss, r.nom AS region_nom,
                     u.nom AS agent_nom, u.prenom AS agent_prenom,
                     c.annee
@@ -132,7 +136,7 @@ class AdminController extends BaseController
              JOIN campagnes_damo c ON c.id = d.campagne_id
              WHERE $whereClause
              ORDER BY d.updated_at DESC
-             LIMIT ? OFFSET ?",
+             LIMIT \$$limitIdx OFFSET \$$offsetIdx",
             $paramsPage
         );
 
@@ -374,42 +378,46 @@ class AdminController extends BaseController
         $role   = get('role', '');
         $region = get('region', '');
 
+        // Placeholders $1,$2,... (PostgreSQL natif, évite conflit ? avec JSON)
         $where  = ['1=1'];
         $params = [];
+        $idx    = 1;
 
         if ($search) {
-            // Chaque ILIKE a son propre ? (fetchAllRaw nécessite des ? purs)
-            $where[] = "(u.nom ILIKE ? OR u.prenom ILIKE ? OR u.email ILIKE ?)";
+            $where[] = "(u.nom ILIKE \$$idx OR u.prenom ILIKE \$$idx OR u.email ILIKE \$$idx)";
             $params[] = "%$search%";
-            $params[] = "%$search%";
-            $params[] = "%$search%";
+            $idx++;
         }
         if ($role) {
-            $where[] = "u.role = ?";
+            $where[] = "u.role = \$$idx";
             $params[] = $role;
+            $idx++;
         }
         if ($region) {
-            $where[] = "u.region_id = ?";
+            $where[] = "u.region_id = \$$idx";
             $params[] = (int) $region;
+            $idx++;
         }
 
         $whereClause = implode(' AND ', $where);
-        $total = (int) $this->db->fetchScalarRaw(
-            "SELECT COUNT(*) FROM utilisateurs u WHERE $whereClause",
+        $total = (int) ($this->db->fetchAll(
+            "SELECT COUNT(*) AS cnt FROM utilisateurs u WHERE $whereClause",
             $params
-        );
+        )[0]['cnt'] ?? 0);
 
         $pagination = $this->paginate($total);
         $paramsPage = array_merge($params, [$pagination['per_page'], $pagination['offset']]);
+        $limitIdx  = $idx;
+        $offsetIdx = $idx + 1;
 
-        $utilisateurs = $this->db->fetchAllRaw(
+        $utilisateurs = $this->db->fetchAll(
             "SELECT u.*, r.nom AS region_nom,
                     (SELECT COUNT(*) FROM declarations WHERE agent_id = u.id) AS nb_declarations
              FROM utilisateurs u
              LEFT JOIN regions r ON r.id = u.region_id
              WHERE $whereClause
              ORDER BY u.created_at DESC
-             LIMIT ? OFFSET ?",
+             LIMIT \$$limitIdx OFFSET \$$offsetIdx",
             $paramsPage
         );
 
@@ -882,44 +890,50 @@ class AdminController extends BaseController
         $dateFrom = get('date_from', '');
         $dateTo   = get('date_to', '');
 
+        // Placeholders $1,$2,... (PostgreSQL natif)
         $where  = ['1=1'];
         $params = [];
+        $idx    = 1;
 
         if ($search) {
-            $where[] = "(u.email ILIKE ? OR u.nom ILIKE ? OR l.action ILIKE ?)";
+            $where[] = "(u.email ILIKE \$$idx OR u.nom ILIKE \$$idx OR l.action ILIKE \$$idx)";
             $params[] = "%$search%";
-            $params[] = "%$search%";
-            $params[] = "%$search%";
+            $idx++;
         }
         if ($action) {
-            $where[] = "l.action = ?";
+            $where[] = "l.action = \$$idx";
             $params[] = $action;
+            $idx++;
         }
         if ($dateFrom) {
-            $where[] = "l.created_at >= ?";
+            $where[] = "l.created_at >= \$$idx";
             $params[] = $dateFrom . ' 00:00:00';
+            $idx++;
         }
         if ($dateTo) {
-            $where[] = "l.created_at <= ?";
+            $where[] = "l.created_at <= \$$idx";
             $params[] = $dateTo . ' 23:59:59';
+            $idx++;
         }
 
         $whereClause = implode(' AND ', $where);
-        $total = (int) $this->db->fetchScalarRaw(
-            "SELECT COUNT(*) FROM logs_activite l LEFT JOIN utilisateurs u ON u.id = l.utilisateur_id WHERE $whereClause",
+        $total = (int) ($this->db->fetchAll(
+            "SELECT COUNT(*) AS cnt FROM logs_activite l LEFT JOIN utilisateurs u ON u.id = l.utilisateur_id WHERE $whereClause",
             $params
-        );
+        )[0]['cnt'] ?? 0);
 
         $pagination = $this->paginate($total, 30);
         $paramsPage = array_merge($params, [$pagination['per_page'], $pagination['offset']]);
+        $limitIdx  = $idx;
+        $offsetIdx = $idx + 1;
 
-        $logs = $this->db->fetchAllRaw(
+        $logs = $this->db->fetchAll(
             "SELECT l.*, u.nom, u.prenom, u.email
              FROM logs_activite l
              LEFT JOIN utilisateurs u ON u.id = l.utilisateur_id
              WHERE $whereClause
              ORDER BY l.created_at DESC
-             LIMIT ? OFFSET ?",
+             LIMIT \$$limitIdx OFFSET \$$offsetIdx",
             $paramsPage
         );
 
@@ -940,18 +954,20 @@ class AdminController extends BaseController
         $campagneId = (int) get('campagne', 0);
         $statut     = get('statut', '');
 
+        // Placeholders $1,$2,... (PostgreSQL natif)
         $where  = ['1=1'];
         $params = [];
+        $idx    = 1;
 
         if ($campagneId) {
-            $where[] = "d.campagne_id = ?"; $params[] = $campagneId;
+            $where[] = "d.campagne_id = \$$idx"; $params[] = $campagneId; $idx++;
         }
         if ($statut) {
-            $where[] = "d.statut = ?"; $params[] = $statut;
+            $where[] = "d.statut = \$$idx"; $params[] = $statut; $idx++;
         }
 
         $whereClause = implode(' AND ', $where);
-        $declarations = $this->db->fetchAllRaw(
+        $declarations = $this->db->fetchAll(
             "SELECT d.code_questionnaire, d.statut, d.masse_salariale, d.date_soumission,
                     e.raison_sociale, e.numero_cnss, e.activite_principale,
                     r.nom AS region, c.annee,
@@ -996,24 +1012,24 @@ class AdminController extends BaseController
     public function exportEntreprises(): void
     {
         $regionId = (int) get('region', 0);
-        $where    = ['1=1'];
+        $where    = ['e.actif = TRUE'];
         $params   = [];
         if ($regionId) {
-            $where[]  = 'd.region_id = ?';
+            $where[]  = 'e.region_id = $1';
             $params[] = $regionId;
         }
         $whereClause = implode(' AND ', $where);
 
-        $entreprises = $this->db->fetchAllRaw(
+        $entreprises = $this->db->fetchAll(
             "SELECT e.raison_sociale, e.numero_cnss, e.telephone, e.email,
                     e.activite_principale, e.nationalite, e.localite,
                     r.nom AS region, b.libelle AS branche
              FROM entreprises e
              LEFT JOIN regions r ON r.id = e.region_id
              LEFT JOIN branches_activite b ON b.id = e.branche_id
-             WHERE e.actif = TRUE
+             WHERE $whereClause
              ORDER BY r.nom, e.raison_sociale",
-            []
+            $params
         );
 
         header('Content-Type: text/csv; charset=UTF-8');
