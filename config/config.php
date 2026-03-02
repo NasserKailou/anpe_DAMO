@@ -1,0 +1,150 @@
+<?php
+/**
+ * e-DAMO - Configuration principale
+ * ANPE Niger - Plateforme Digitale de Déclaration Annuelle de la Main d'Œuvre
+ */
+
+// Charger les variables d'environnement
+$envFile = dirname(__DIR__) . '/.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos(trim($line), '#') === 0) continue;
+        if (strpos($line, '=') === false) continue;
+        [$key, $value] = explode('=', $line, 2);
+        $key = trim($key);
+        $value = trim($value, " \t\n\r\0\x0B\"'");
+        if (!array_key_exists($key, $_SERVER) && !array_key_exists($key, $_ENV)) {
+            putenv("$key=$value");
+            $_ENV[$key] = $value;
+            $_SERVER[$key] = $value;
+        }
+    }
+}
+
+// ===== CONFIGURATION APPLICATION =====
+define('APP_NAME',        'e-DAMO');
+define('APP_FULL_NAME',   'Plateforme Digitale de Déclaration Annuelle de la Main d\'Œuvre');
+define('APP_VERSION',     '1.0.0');
+define('APP_ENV',         getenv('APP_ENV') ?: 'production');
+define('APP_DEBUG',       filter_var(getenv('APP_DEBUG') ?: false, FILTER_VALIDATE_BOOLEAN));
+define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
+define('APP_KEY',         getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');
+define('APP_TIMEZONE',    'Africa/Niamey');
+define('APP_LOCALE',      'fr_FR');
+
+// ===== CONFIGURATION BASE DE DONNÉES =====
+define('DB_HOST',     getenv('DB_HOST') ?: '127.0.0.1');
+define('DB_PORT',     getenv('DB_PORT') ?: '5432');
+define('DB_NAME',     getenv('DB_NAME') ?: 'edamo_db');
+define('DB_USER',     getenv('DB_USER') ?: 'edamo_user');
+define('DB_PASS',     getenv('DB_PASS') ?: 'edamo_password');
+define('DB_SCHEMA',   getenv('DB_SCHEMA') ?: 'public');
+
+// ===== CONFIGURATION SESSION =====
+define('SESSION_NAME',     'EDAMO_SESSION');
+define('SESSION_LIFETIME', 7200); // 2 heures
+define('SESSION_PATH',     dirname(__DIR__) . '/storage/sessions');
+define('SESSION_SECURE',   APP_ENV === 'production');
+define('SESSION_HTTPONLY',  true);
+define('SESSION_SAMESITE',  'Strict');
+
+// ===== CHEMINS =====
+define('ROOT_PATH',    dirname(__DIR__));
+define('APP_PATH',     ROOT_PATH . '/app');
+define('PUBLIC_PATH',  ROOT_PATH . '/public');
+define('VIEW_PATH',    APP_PATH . '/Views');
+define('CONFIG_PATH',  ROOT_PATH . '/config');
+define('STORAGE_PATH', ROOT_PATH . '/storage');
+define('LOG_PATH',     STORAGE_PATH . '/logs');
+define('UPLOAD_PATH',  PUBLIC_PATH . '/uploads');
+
+// ===== SÉCURITÉ =====
+define('BCRYPT_COST',         12);
+define('CSRF_TOKEN_LENGTH',   32);
+define('TOKEN_EXPIRY',        3600);
+define('MAX_LOGIN_ATTEMPTS',  5);
+define('LOCKOUT_TIME',        900); // 15 minutes
+define('PASSWORD_MIN_LENGTH', 8);
+
+// ===== PAGINATION =====
+define('ITEMS_PER_PAGE', 20);
+
+// ===== UPLOAD =====
+define('MAX_FILE_SIZE',    10 * 1024 * 1024); // 10 MB
+define('ALLOWED_TYPES',    ['application/pdf', 'image/jpeg', 'image/png']);
+define('GUIDES_UPLOAD_DIR', UPLOAD_PATH . '/guides');
+
+// ===== RÉGIONS NIGER =====
+define('REGIONS_NIGER', [
+    '1'  => 'Agadez',
+    '2'  => 'Diffa',
+    '3'  => 'Dosso',
+    '4'  => 'Maradi',
+    '5'  => 'Tahoua',
+    '6'  => 'Tillabéri',
+    '7'  => 'Zinder',
+    '8'  => 'Niamey',
+    '11' => 'Arlit',
+    '51' => 'Konni',
+]);
+
+// ===== CATÉGORIES PROFESSIONNELLES =====
+define('CATEGORIES_PROFESSIONNELLES', [
+    'cadres_superieurs'    => 'Cadres supérieurs',
+    'agents_maitrise'      => 'Agents de maîtrise',
+    'employes_bureau'      => 'Employés de bureau',
+    'ouvriers_qualifies'   => 'Ouvriers qualifiés',
+    'ouvriers_specialises' => 'Ouvriers spécialisés',
+    'manœuvres'            => 'Manœuvres',
+    'apprentis_stagiaires' => 'Apprentis / Stagiaires',
+]);
+
+// ===== NIVEAUX D'INSTRUCTION =====
+define('NIVEAUX_INSTRUCTION', [
+    'non_scolarise'       => 'Non scolarisé',
+    'primaire'            => 'Primaire',
+    'secondaire_1er'      => 'Secondaire 1er cycle',
+    'secondaire_2eme'     => 'Secondaire 2ème cycle',
+    'moyen_prof'          => 'Moyen (Ens. Prof. & Technique)',
+    'superieur_prof'      => 'Supérieur (Ens. Prof. & Technique)',
+    'superieur_1'         => 'Supérieur 1 (Bac+2)',
+    'superieur_2'         => 'Supérieur 2 (Bac+3 ou 4)',
+    'superieur_3'         => 'Supérieur 3 (Bac+5 et plus)',
+]);
+
+// ===== MOTIFS PERTE D'EMPLOI =====
+define('MOTIFS_PERTE_EMPLOI', [
+    'licenciement'  => 'Licenciement',
+    'demission'     => 'Démission',
+    'fin_contrat'   => 'Fin de Contrat',
+    'retraite'      => 'Retraite',
+    'deces'         => 'Décès',
+    'autres'        => 'Autres',
+]);
+
+// ===== STATUTS DÉCLARATION =====
+define('STATUT_BROUILLON',  'brouillon');
+define('STATUT_SOUMISE',    'soumise');
+define('STATUT_VALIDEE',    'validee');
+define('STATUT_REJETEE',    'rejetee');
+define('STATUT_CORRIGEE',   'corrigee');
+
+// ===== RÔLES UTILISATEURS =====
+define('ROLE_SUPER_ADMIN', 'super_admin');
+define('ROLE_ADMIN',       'admin');
+define('ROLE_AGENT',       'agent');
+
+// Configuration du fuseau horaire
+date_default_timezone_set(APP_TIMEZONE);
+
+// Configuration d'erreurs selon l'environnement
+if (APP_DEBUG) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', '1');
+} else {
+    error_reporting(0);
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+    ini_set('error_log', LOG_PATH . '/php_errors.log');
+}

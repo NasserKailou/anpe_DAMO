@@ -1,0 +1,127 @@
+/* ============================================================
+   e-DAMO - CSS Auth (page de connexion)
+   ============================================================ */
+
+body.auth-layout {
+    background: linear-gradient(135deg, #1a2a4a 0%, #1a5276 40%, #2980b9 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.auth-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+.auth-container {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    padding: 40px;
+    width: 100%;
+    max-width: 420px;
+    animation: slideUp 0.4s ease;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.auth-logo {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    margin-bottom: 12px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.04); }
+}
+
+.auth-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #1a5276;
+    margin: 0;
+    letter-spacing: 2px;
+}
+
+.auth-subtitle {
+    font-size: 0.78rem;
+    color: #7f8c8d;
+    margin: 4px 0 0;
+}
+
+.auth-form .form-label { font-weight: 500; color: #34495e; }
+
+.auth-form .form-control {
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: all 0.2s;
+}
+
+.auth-form .form-control:focus {
+    border-color: #1a5276;
+    box-shadow: 0 0 0 3px rgba(26,82,118,0.1);
+}
+
+.btn-auth {
+    padding: 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #1a5276, #2980b9);
+    border: none;
+    transition: all 0.3s;
+}
+
+.btn-auth:hover {
+    background: linear-gradient(135deg, #154360, #1a5276);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(26,82,118,0.3);
+}
+
+.auth-link {
+    color: #1a5276;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.auth-link:hover { text-decoration: underline; }
+
+.auth-links {
+    text-align: center;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e9ecef;
+}
+
+.auth-footer {
+    padding: 16px;
+    text-align: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 0.75rem;
+}
+
+.toggle-password { border-left: none; background: white; }
+.toggle-password:hover { background: #f8f9fa; }
+
+@media (max-width: 480px) {
+    .auth-container { padding: 28px 20px; }
+    .auth-title { font-size: 1.5rem; }
+}

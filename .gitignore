@@ -1,0 +1,42 @@
+# Dépendances
+/vendor/
+/node_modules/
+
+# Fichiers d'environnement
+.env
+.env.local
+.env.production
+*.env
+
+# Stockage local
+/storage/logs/*.log
+/storage/cache/*
+/storage/sessions/*
+!/storage/logs/.gitkeep
+!/storage/cache/.gitkeep
+!/storage/sessions/.gitkeep
+
+# Uploads (sauf .gitkeep)
+/public/uploads/guides/*
+!/public/uploads/guides/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PHP
+*.cache
+
+# Composer
+composer.lock
+
+# Fichiers de configuration sensibles
+/config/database.php.bak
