@@ -70,22 +70,22 @@ class Router
             $method = strtoupper($_POST['_method']);
         }
 
-        // Obtenir l'URI sans query string et sans le préfixe du sous-dossier
-        // Cas 1 : /anpe_DAMO/profil           → /profil
-        // Cas 2 : /anpe_DAMO/public/profil    → /profil  (après redirection interne Apache)
-        $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        // Obtenir l'URI sans query string, décodée, et sans le préfixe BASE_PATH
+        //
+        // Avec XAMPP sous-dossier  (RewriteBase /anpe_DAMO/) :
+        //   REQUEST_URI = /anpe_DAMO/login   →  uri = /login
+        //   REQUEST_URI = /anpe_DAMO/profil  →  uri = /profil
+        //
+        // Avec VirtualHost (RewriteBase /) :
+        //   REQUEST_URI = /login             →  uri = /login
+        $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+        $uri = rawurldecode($uri);
 
         $basePath = defined('BASE_PATH') ? BASE_PATH : '';
 
         // Supprimer le préfixe BASE_PATH (ex: /anpe_DAMO)
         if ($basePath !== '' && str_starts_with($uri, $basePath)) {
             $uri = substr($uri, strlen($basePath));
-        }
-
-        // Supprimer le segment /public/ résiduel qu'Apache peut injecter
-        // quand le .htaccess racine redirige en interne vers public/
-        if (str_starts_with($uri, '/public/') || $uri === '/public') {
-            $uri = substr($uri, strlen('/public'));
         }
 
         $uri = '/' . ltrim($uri, '/');

@@ -1,65 +1,47 @@
 Options -Indexes
 ServerSignature Off
 
-# ============================================================
-# e-DAMO — .htaccess PUBLIC/
-#
-# Ce fichier gère le routage front-controller vers index.php.
-#
-# INSTALLATIONS SUPPORTÉES :
-#   CAS 1 – Racine (VirtualHost dédié, DocumentRoot = …/public)
-#       http://localhost:8085/login         ✓
-#       http://localhost:8085/statistiques  ✓
-#
-#   CAS 2 – Sous-dossier (DocumentRoot = htdocs, projet dans anpe_DAMO/public)
-#       http://localhost:8085/anpe_DAMO/login         ✓
-#       http://localhost:8085/anpe_DAMO/statistiques  ✓
-#
-# Pour basculer entre les deux cas, changez uniquement RewriteBase ci-dessous.
-# ============================================================
-
 RewriteEngine On
 
-# ── Choisir la RewriteBase selon votre installation ─────────────────────────
-# CAS 1 : projet à la racine ou VirtualHost dédié
-#RewriteBase /
-
-# CAS 2 : projet dans un sous-dossier /anpe_DAMO/
-#         (le dossier public/ est accessible en /anpe_DAMO/public/ ou /anpe_DAMO/)
+# ─────────────────────────────────────────────────────────────
+# IMPORTANT : Choisir la RewriteBase selon votre installation
+#
+#   CAS 1 – sous-dossier XAMPP (htdocs/anpe_DAMO/)
+#            URL : http://localhost:8085/anpe_DAMO/login
 RewriteBase /anpe_DAMO/
+#
+#   CAS 2 – VirtualHost dédié (DocumentRoot = .../anpe_DAMO/public)
+#            URL : http://localhost:8085/login
+#RewriteBase /
+# ─────────────────────────────────────────────────────────────
 
-# ── Sécurité : bloquer les fichiers sensibles ────────────────────────────────
-RewriteRule ^\.env$               - [F,L]
-RewriteRule ^\.git                - [F,L]
-RewriteRule ^composer\.(json|lock)$ - [F,L]
+# Bloquer les fichiers sensibles
+RewriteRule ^\.env$                  - [F,L]
+RewriteRule ^\.git                   - [F,L]
+RewriteRule ^composer\.(json|lock)$  - [F,L]
 
-# ── Protection contre les scanners malveillants ──────────────────────────────
-RewriteCond %{HTTP_USER_AGENT} ^$ [OR]
-RewriteCond %{HTTP_USER_AGENT} (nikto|sqlmap|masscan|nmap|python-requests) [NC]
-RewriteRule .* - [F,L]
+# Laisser passer les fichiers et dossiers qui existent vraiment (assets CSS/JS/img)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# ── Ne pas réécrire les fichiers statiques existants ─────────────────────────
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+# Tout le reste → index.php (front controller)
+RewriteRule ^ index.php [QSA,L]
 
-# ── Front-controller : tout passe par index.php ──────────────────────────────
-RewriteRule ^(.*)$ index.php [QSA,L]
-
-# ── En-têtes de sécurité ────────────────────────────────────────────────────
+# ── En-têtes de sécurité ─────────────────────────────────────
 <IfModule mod_headers.c>
-    Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "SAMEORIGIN"
-    Header always set X-XSS-Protection "1; mode=block"
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    Header always set Content-Security-Policy "default-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob:;"
+    Header always set X-Content-Type-Options  "nosniff"
+    Header always set X-Frame-Options         "SAMEORIGIN"
+    Header always set X-XSS-Protection        "1; mode=block"
+    Header always set Referrer-Policy         "strict-origin-when-cross-origin"
 </IfModule>
 
-# ── Compression GZIP ─────────────────────────────────────────────────────────
+# ── GZIP ─────────────────────────────────────────────────────
 <IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json
 </IfModule>
 
-# ── Cache navigateur pour les assets statiques ───────────────────────────────
+# ── Cache assets statiques ───────────────────────────────────
 <FilesMatch "\.(css|js|png|jpg|jpeg|gif|ico|woff|woff2|ttf|svg)$">
     <IfModule mod_headers.c>
         Header set Cache-Control "max-age=2592000, public"

@@ -30,21 +30,35 @@ define('APP_ENV',         getenv('APP_ENV') ?: 'production');
 define('APP_DEBUG',       filter_var(getenv('APP_DEBUG') ?: false, FILTER_VALIDATE_BOOLEAN));
 define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
 
-// Sous-dossier de base détecté automatiquement depuis SCRIPT_NAME.
-// On enlève aussi le segment "public" si le fichier index.php est servi
-// directement depuis public/ via un VirtualHost (DocumentRoot = …/public).
+// BASE_PATH — préfixe de sous-dossier détecté automatiquement
 //
-// Exemples :
-//   SCRIPT_NAME = /anpe_DAMO/index.php   → BASE_PATH = '/anpe_DAMO'
-//   SCRIPT_NAME = /anpe_DAMO/public/index.php → BASE_PATH = '/anpe_DAMO'
-//   SCRIPT_NAME = /index.php             → BASE_PATH = ''
+// Principe : on part de REQUEST_URI et SCRIPT_NAME pour trouver
+//            le préfixe commun, ce qui est 100% fiable quelle que
+//            soit la config Apache (sous-dossier, VirtualHost, Alias).
+//
+// Exemples XAMPP sous-dossier (htdocs/anpe_DAMO/) :
+//   SCRIPT_NAME  = /anpe_DAMO/public/index.php
+//   REQUEST_URI  = /anpe_DAMO/login
+//   → BASE_PATH  = /anpe_DAMO
+//
+// Exemples VirtualHost (DocumentRoot = .../anpe_DAMO/public) :
+//   SCRIPT_NAME  = /index.php
+//   REQUEST_URI  = /login
+//   → BASE_PATH  = ''
 (function () {
-    $scriptDir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');
-    // Si le dossier se termine par /public, on le retire pour ne garder que le préfixe
-    if (str_ends_with($scriptDir, '/public') || $scriptDir === '/public') {
-        $scriptDir = rtrim(substr($scriptDir, 0, -7), '/\\');
+    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
+
+    // Dossier contenant index.php  ex: /anpe_DAMO/public  ou  /anpe_DAMO  ou  /
+    $dir = rtrim(dirname($scriptName), '/\\');
+
+    // Enlever le segment /public terminal s'il est présent
+    // (cas XAMPP : SCRIPT_NAME = /anpe_DAMO/public/index.php)
+    if ($dir === '/public' || str_ends_with($dir, '/public')) {
+        $dir = rtrim(substr($dir, 0, -strlen('/public')), '/\\');
     }
-    define('BASE_PATH', $scriptDir);
+
+    // $dir vaut maintenant '' (racine) ou '/anpe_DAMO'
+    define('BASE_PATH', $dir === '' ? '' : $dir);
 })();
 define('APP_KEY',         getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');
 define('APP_TIMEZONE',    'Africa/Niamey');

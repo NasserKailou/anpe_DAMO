@@ -66,14 +66,10 @@ if (!headers_sent()) {
 // ── Rate limiting basique (anti-brute-force) ──
 // Enlever le préfixe de sous-dossier avant de comparer les chemins
 $_rawPath    = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-$_basePath   = defined('BASE_PATH') ? BASE_PATH : rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');
+$_basePath   = defined('BASE_PATH') ? BASE_PATH : '';
 $requestPath = ($_basePath !== '' && str_starts_with($_rawPath, $_basePath))
     ? substr($_rawPath, strlen($_basePath))
     : $_rawPath;
-// Supprimer le segment /public/ résiduel (cas XAMPP .htaccess racine)
-if (str_starts_with($requestPath, '/public/') || $requestPath === '/public') {
-    $requestPath = substr($requestPath, strlen('/public'));
-}
 $requestPath = '/' . ltrim($requestPath, '/');
 if (in_array($requestPath, ['/login', '/mot-de-passe-oublie'])
     && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
