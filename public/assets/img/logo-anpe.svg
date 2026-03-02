@@ -1,5 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <circle cx="50" cy="50" r="48" fill="white" stroke="#1a5276" stroke-width="3"/>
-  <text x="50" y="45" text-anchor="middle" font-family="Arial" font-weight="bold" font-size="14" fill="#1a5276">ANPE</text>
-  <text x="50" y="62" text-anchor="middle" font-family="Arial" font-size="7" fill="#e67e22">NIGER</text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- Fond circulaire dégradé bleu ANPE -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d3261;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#1a4f8a;stop-opacity:1"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cercle principal -->
+  <circle cx="60" cy="60" r="58" fill="url(#bgGrad)"/>
+  <!-- Bordure dorée -->
+  <circle cx="60" cy="60" r="58" fill="none" stroke="url(#goldGrad)" stroke-width="3"/>
+
+  <!-- Silhouette personne / engagement emploi -->
+  <!-- Tête -->
+  <circle cx="60" cy="32" r="10" fill="#ffffff"/>
+  <!-- Corps -->
+  <path d="M42 70 C42 52 78 52 78 70 L78 82 C78 84 76 86 74 86 L46 86 C44 86 42 84 42 82 Z" fill="#ffffff"/>
+  <!-- Bras gauche pointant vers l'avant (dynamisme) -->
+  <path d="M42 65 L28 55" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>
+  <!-- Bras droit (serrement de main / accord) -->
+  <path d="M78 65 L92 55" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Texte ANPE -->
+  <text x="60" y="103" text-anchor="middle"
+        font-family="Arial, sans-serif" font-size="11" font-weight="bold"
+        fill="#f59e0b" letter-spacing="2">ANPE</text>
+  <!-- Sous-titre NIGER -->
+  <text x="60" y="115" text-anchor="middle"
+        font-family="Arial, sans-serif" font-size="8" font-weight="normal"
+        fill="rgba(255,255,255,0.7)" letter-spacing="1">NIGER</text>
 </svg>

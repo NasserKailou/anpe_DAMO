@@ -373,6 +373,39 @@
 }
 .pub-footer-link:hover { color: var(--pub-accent); }
 
+/* ===== PUB-HERO (réutilisable sur toutes les pages publiques) ===== */
+.pub-hero {
+    background: linear-gradient(150deg, var(--pub-primary-dark) 0%, var(--pub-primary) 55%, var(--pub-primary-mid) 100%);
+    padding: 72px 0 80px;
+    position: relative;
+    overflow: hidden;
+}
+.pub-hero::before {
+    content:'';
+    position:absolute;
+    inset:0;
+    background:
+        radial-gradient(circle at 80% 20%, rgba(245,158,11,.1) 0%, transparent 40%),
+        radial-gradient(circle at 10% 80%, rgba(255,255,255,.04) 0%, transparent 40%);
+    pointer-events:none;
+}
+.pub-hero-sm {
+    padding: 56px 0 48px;
+}
+.pub-hero-title {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-bottom: 14px;
+    text-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.pub-hero-desc {
+    font-size: 1.05rem;
+    opacity: .82;
+    max-width: 560px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
 /* ===== ALERT STYLES ===== */
 .alert { border-radius: 10px; border: none; font-size: .88rem; }
 .alert-success { background: #f0fdf4; color: #15803d; }

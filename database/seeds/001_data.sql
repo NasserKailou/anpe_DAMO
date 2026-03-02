@@ -108,3 +108,18 @@ INSERT INTO parametres (cle, valeur, description, type) VALUES
     ('items_par_page', '20', 'Nombre d''éléments par page', 'integer'),
     ('logo_path', '/assets/img/logo-anpe.png', 'Chemin du logo', 'string')
 ON CONFLICT (cle) DO NOTHING;
+
+-- Guide de remplissage DAMO 2026 (fichier PDF intégré)
+INSERT INTO guides_documents (titre, description, fichier_nom, fichier_path, fichier_taille, fichier_type, annee, actif, ordre) VALUES
+    (
+        'Guide de remplissage du formulaire DAMO 2026',
+        'Guide officiel de remplissage du Formulaire de Déclaration Annuelle de la Main d''Œuvre (DAMO). Ce document explique étape par étape comment compléter correctement chaque section du formulaire RAMO.',
+        'guide_damo_2026.pdf',
+        'uploads/guides/guide_damo_2026.pdf',
+        864167,
+        'application/pdf',
+        2026,
+        TRUE,
+        1
+    )
+ON CONFLICT DO NOTHING;
