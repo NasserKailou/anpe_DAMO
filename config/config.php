@@ -36,9 +36,9 @@ define('APP_LOCALE',      'fr_FR');
 // ===== CONFIGURATION BASE DE DONNÉES =====
 define('DB_HOST',     getenv('DB_HOST') ?: '127.0.0.1');
 define('DB_PORT',     getenv('DB_PORT') ?: '5432');
-define('DB_NAME',     getenv('DB_NAME') ?: 'edamo_db');
-define('DB_USER',     getenv('DB_USER') ?: 'edamo_user');
-define('DB_PASS',     getenv('DB_PASS') ?: 'edamo_password');
+define('DB_NAME',     getenv('DB_NAME') ?: 'edamo');
+define('DB_USER',     getenv('DB_USER') ?: 'postgres');
+define('DB_PASS',     getenv('DB_PASS') ?: 'admin');
 define('DB_SCHEMA',   getenv('DB_SCHEMA') ?: 'public');
 
 // ===== CONFIGURATION SESSION =====
