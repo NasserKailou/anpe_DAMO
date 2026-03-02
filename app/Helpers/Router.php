@@ -70,9 +70,14 @@ class Router
             $method = strtoupper($_POST['_method']);
         }
 
-        // Obtenir l'URI sans query string et sans le sous-dossier
+        // Obtenir l'URI sans query string et sans le préfixe du sous-dossier
+        // Ex : /anpe_DAMO/admin/declarations → /admin/declarations
         $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-        $uri = '/' . trim($uri, '/');
+        $basePath = defined('BASE_PATH') ? BASE_PATH : '';
+        if ($basePath !== '' && str_starts_with($uri, $basePath)) {
+            $uri = substr($uri, strlen($basePath));
+        }
+        $uri = '/' . ltrim($uri, '/');
         if ($uri === '') $uri = '/';
 
         foreach (self::$routes as $route) {

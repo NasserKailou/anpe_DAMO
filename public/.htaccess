@@ -4,6 +4,11 @@ ServerSignature Off
 # Activer le moteur de réécriture
 RewriteEngine On
 
+# Base de réécriture – adapter selon l'emplacement du projet sur le serveur
+# Si le projet est dans /anpe_DAMO/ → RewriteBase /anpe_DAMO/
+# Si le projet est à la racine      → RewriteBase /
+RewriteBase /anpe_DAMO/
+
 # Sécurité : bloquer l'accès aux fichiers sensibles
 RewriteRule ^\.env$ - [F,L]
 RewriteRule ^\.git - [F,L]
