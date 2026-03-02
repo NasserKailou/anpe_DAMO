@@ -542,6 +542,39 @@ class DeclarationController extends BaseController
     }
 
     /**
+     * Corriger une déclaration rejetée (POST depuis la vue)
+     * Route : POST /agent/declaration/:id/corriger
+     */
+    public function corriger(string $id): void
+    {
+        $this->requireCsrf();
+        $user        = currentUser();
+        $declaration = $this->getDeclarationForAgent((int) $id, $user);
+
+        if (!$declaration) {
+            redirectWith('agent/declarations', 'error', 'Déclaration introuvable.');
+        }
+
+        if ($declaration['statut'] !== 'rejetee') {
+            redirectWith('agent/declarations', 'error', 'Seules les déclarations rejetées peuvent être corrigées.');
+        }
+
+        // Remettre en statut "corrigee" pour permettre la saisie
+        $this->db->execute(
+            "UPDATE declarations SET statut = 'corrigee', etape_courante = 1, updated_at = NOW() WHERE id = $1",
+            [(int) $id]
+        );
+
+        // Journaliser l'action
+        logActivity('declaration_correction_started', 'declarations', (int) $id, [
+            'ancien_statut' => 'rejetee',
+            'nouveau_statut' => 'corrigee',
+        ]);
+
+        redirectWith("agent/declaration/$id/saisie", 'success', 'Vous pouvez maintenant corriger votre déclaration.');
+    }
+
+    /**
      * Mettre à jour les infos entreprise depuis la déclaration
      */
     private function updateEntrepriseFromDeclaration(int $decId): void

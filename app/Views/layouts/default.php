@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="<?= e(APP_FULL_NAME) ?> — ANPE Niger">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="csrf-token" content="<?= csrfToken() ?>">
     <title><?= e($pageTitle ?? APP_NAME) ?> — e-DAMO</title>
 
     <!-- Favicon -->

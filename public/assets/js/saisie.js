@@ -3,6 +3,7 @@
  */
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 const DECL_ID    = document.getElementById('wizard-form')?.dataset.declId ?? 0;
+const BASE        = (window.APP_BASE ?? '').replace(/\/+$/, '');
 
 let currentEtape = parseInt(document.getElementById('wizard-form')?.dataset.etape ?? '1');
 let autoSaveTimer = null;
@@ -77,7 +78,7 @@ async function saveCurrentEtape() {
     fd.append('_csrf_token', CSRF_TOKEN);
 
     try {
-        const resp = await fetch(`/agent/declaration/${DECL_ID}/sauvegarder`, {
+        const resp = await fetch(`${BASE}/agent/declaration/${DECL_ID}/sauvegarder`, {
             method: 'POST', body: fd,
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
@@ -182,14 +183,14 @@ async function soumettreDeclaration() {
     fd.append('_csrf_token', CSRF_TOKEN);
 
     try {
-        const resp = await fetch(`/agent/declaration/${DECL_ID}/soumettre`, {
+        const resp = await fetch(`${BASE}/agent/declaration/${DECL_ID}/soumettre`, {
             method: 'POST', body: fd,
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
         const json = await resp.json();
         if (json.success) {
             showToast('Déclaration soumise avec succès !', 'success');
-            setTimeout(() => location.href = json.redirect ?? `/agent/declaration/${DECL_ID}/apercu`, 1500);
+            setTimeout(() => location.href = json.redirect ?? `${BASE}/agent/declaration/${DECL_ID}/apercu`, 1500);
         } else {
             showToast(json.message ?? 'Erreur lors de la soumission', 'danger');
         }

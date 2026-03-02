@@ -89,7 +89,7 @@
                 </h6>
             </div>
             <div class="card-body">
-                <form method="POST" action="<?= url('profil/update') ?>">
+                <form method="POST" action="<?= url('profil/modifier') ?>">
                     <?= csrfField() ?>
                     <div class="row g-3">
                         <div class="col-md-6">
@@ -134,7 +134,7 @@
                 </h6>
             </div>
             <div class="card-body">
-                <form method="POST" action="<?= url('profil/password') ?>" id="formPassword">
+                <form method="POST" action="<?= url('profil/mot-de-passe') ?>" id="formPassword">
                     <?= csrfField() ?>
                     <div class="row g-3">
                         <div class="col-12">

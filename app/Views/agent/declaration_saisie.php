@@ -1,133 +1,113 @@
 <?php
 /**
  * Vue de saisie multi-étapes d'une déclaration
- * Étape 1: Identification | 2: Effectifs Mensuels | 3: Catégories | 4: Niveaux instruction
- * Étape 5: Formation | 6: Pertes d'emploi | 7: Effectifs étrangers
+ * Compatible avec public/assets/js/saisie.js et css/saisie.css
  */
+if (!defined('EDAMO')) exit;
+
 $declaration = $declaration ?? [];
 $entreprise  = $data['entreprise'] ?? [];
-$etape       = $etape ?? 1;
+$etape       = (int)($etape ?? 1);
 $data        = $data ?? [];
 
-$etapes = [
-    1 => ['titre' => 'Identification',       'icon' => 'bi-building'],
-    2 => ['titre' => 'Effectifs mensuels',   'icon' => 'bi-calendar3'],
-    3 => ['titre' => 'Catégories',           'icon' => 'bi-people'],
-    4 => ['titre' => 'Niveaux instruction',  'icon' => 'bi-mortarboard'],
-    5 => ['titre' => 'Formation prof.',      'icon' => 'bi-award'],
-    6 => ['titre' => 'Pertes d\'emploi',     'icon' => 'bi-person-dash'],
-    7 => ['titre' => 'Effectifs étrangers',  'icon' => 'bi-globe'],
-];
-
-$moisLabels = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-
-$statut = $declaration['statut'] ?? 'brouillon';
+$statut  = $declaration['statut'] ?? 'brouillon';
 $canEdit = in_array($statut, ['brouillon', 'corrigee']);
 $decId   = $declaration['id'] ?? 0;
 $pct     = $declaration['pourcentage_completion'] ?? 0;
+
+$etapeTitres = [
+    1 => ['titre' => 'Identification',      'icon' => 'bi-building'],
+    2 => ['titre' => 'Effectifs mensuels',  'icon' => 'bi-calendar3'],
+    3 => ['titre' => 'Catégories',          'icon' => 'bi-people'],
+    4 => ['titre' => 'Niveaux instruction', 'icon' => 'bi-mortarboard'],
+    5 => ['titre' => 'Formation prof.',     'icon' => 'bi-award'],
+    6 => ['titre' => 'Pertes d\'emploi',    'icon' => 'bi-person-dash'],
+    7 => ['titre' => 'Eff. étrangers',      'icon' => 'bi-globe'],
+];
+
+$moisLabels = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 ?>
 
-<style>
-.wizard-step { display: none; }
-.wizard-step.active { display: block; }
-.step-nav-item { cursor: pointer; transition: all 0.2s; }
-.step-nav-item.completed .step-circle { background: #198754; color: #fff; border-color: #198754; }
-.step-nav-item.active .step-circle   { background: #0d6efd; color: #fff; border-color: #0d6efd; }
-.step-nav-item.pending .step-circle  { background: #fff; color: #6c757d; border-color: #dee2e6; }
-.step-circle { width: 36px; height: 36px; border-radius: 50%; border: 2px solid; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; margin: 0 auto 4px; }
-.step-connector { flex: 1; height: 2px; background: #dee2e6; margin: 0 4px; margin-top: -20px; }
-.step-connector.done { background: #198754; }
-.table-saisie input[type=number] { width: 80px; text-align: center; }
-.table-saisie input[type=number]:focus { box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25); }
-.etrangers-row { background: #f8f9fa; }
-</style>
-
-<!-- En-tête de la déclaration -->
+<!-- Barre de progression et titre -->
 <div class="row mb-3">
-    <div class="col-lg-8">
+    <div class="col-lg-9">
         <div class="card border-0 shadow-sm">
             <div class="card-body py-3">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="p-2 bg-primary bg-opacity-10 rounded">
-                        <i class="bi bi-file-earmark-text text-primary fs-4"></i>
-                    </div>
+                <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
                     <div>
-                        <h5 class="mb-0"><?= e($entreprise['raison_sociale'] ?? '') ?></h5>
-                        <small class="text-muted">
-                            Code: <strong><?= e($declaration['code_questionnaire'] ?? '') ?></strong>
-                            &bull; Campagne: <strong><?= e($entreprise['annee'] ?? '') ?></strong>
-                            &bull; Région: <?= e($entreprise['region_nom'] ?? '') ?>
-                        </small>
+                        <h6 class="mb-0 fw-bold">
+                            <i class="bi bi-file-earmark-text text-primary me-2"></i>
+                            <?= e($declaration['code_questionnaire'] ?? '') ?>
+                        </h6>
+                        <small class="text-muted"><?= e($entreprise['raison_sociale'] ?? '') ?></small>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-<?= $statut === 'brouillon' ? 'secondary' : ($statut === 'corrigee' ? 'warning' : 'success') ?> fs-6">
+                            <?= ucfirst($statut) ?>
+                        </span>
                     </div>
                 </div>
+                <div class="progress-bar-declaration">
+                    <div class="fill" style="width:<?= $pct ?>%"></div>
+                </div>
+                <small class="text-muted" id="progress-label">Étape <?= $etape ?>/7 — <?= $pct ?>%</small>
             </div>
         </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-lg-3">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-body py-3">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <small class="fw-semibold">Progression</small>
-                    <small class="text-primary fw-bold"><?= $pct ?>%</small>
-                </div>
-                <div class="progress" style="height:8px">
-                    <div class="progress-bar bg-primary" style="width:<?= $pct ?>%"></div>
-                </div>
-                <div class="mt-2">
-                    <?php
-                    $badgeClass = ['brouillon'=>'secondary','soumise'=>'warning','validee'=>'success','rejetee'=>'danger','corrigee'=>'info'][$statut] ?? 'secondary';
-                    $badgeLabel = ['brouillon'=>'Brouillon','soumise'=>'Soumise','validee'=>'Validée','rejetee'=>'Rejetée','corrigee'=>'En correction'][$statut] ?? $statut;
-                    ?>
-                    <span class="badge bg-<?= $badgeClass ?>"><?= $badgeLabel ?></span>
-                    <?php if ($declaration['motif_rejet'] ?? ''): ?>
-                        <div class="alert alert-danger py-1 px-2 mt-1 mb-0" style="font-size:.78rem">
-                            <i class="bi bi-exclamation-triangle me-1"></i> <?= e($declaration['motif_rejet']) ?>
-                        </div>
-                    <?php endif; ?>
+            <div class="card-body py-3 d-flex align-items-center">
+                <div id="autosave-status" class="autosave-indicator">
+                    <i class="bi bi-cloud-check me-1"></i>Prêt
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Navigation des étapes -->
-<div class="card border-0 shadow-sm mb-3">
+<!-- Navigation wizard étapes -->
+<div class="card border-0 shadow-sm mb-4">
     <div class="card-body py-3">
-        <div class="d-flex align-items-start justify-content-between" id="steps-nav">
-            <?php foreach ($etapes as $num => $info): ?>
+        <div class="wizard-steps d-flex align-items-center" style="overflow-x:auto; padding:8px 0; gap:0">
+            <?php foreach ($etapeTitres as $num => $info): ?>
                 <?php
-                $etapeCourante = (int)($declaration['etape_courante'] ?? 1);
-                $stepClass = $num < $etape ? 'completed' : ($num === $etape ? 'active' : 'pending');
+                $cls = 'pending';
+                if ($num < $etape) $cls = 'done';
+                elseif ($num === $etape) $cls = 'active';
                 ?>
-                <div class="step-nav-item <?= $stepClass ?> text-center" style="flex:1"
-                     onclick="goToStep(<?= $num ?>)" data-step="<?= $num ?>">
-                    <div class="step-circle">
+                <div class="wizard-step <?= $cls ?>" data-step="<?= $num ?>" style="cursor:pointer; flex-shrink:0; text-align:center; min-width:80px">
+                    <div class="wizard-step-num">
                         <?php if ($num < $etape): ?>
                             <i class="bi bi-check-lg"></i>
                         <?php else: ?>
                             <?= $num ?>
                         <?php endif; ?>
                     </div>
-                    <div style="font-size:.7rem; line-height:1.2"><?= $info['titre'] ?></div>
+                    <div class="wizard-step-label"><?= $info['titre'] ?></div>
                 </div>
                 <?php if ($num < 7): ?>
-                    <div class="step-connector <?= $num < $etape ? 'done' : '' ?>"></div>
+                    <div class="wizard-sep <?= $num < $etape ? 'done' : '' ?>" style="flex:1; min-width:12px; height:2px; background:#e0e0e0; margin:0 2px; margin-top:-14px"></div>
                 <?php endif; ?>
             <?php endforeach; ?>
         </div>
     </div>
 </div>
 
-<!-- Formulaire principal -->
-<form id="form-saisie" method="POST" action="<?= url("agent/declaration/$decId/sauvegarder") ?>">
+<!-- Formulaire principal wizard -->
+<form id="wizard-form"
+      method="POST"
+      action="<?= url("agent/declaration/$decId/sauvegarder") ?>"
+      data-decl-id="<?= $decId ?>"
+      data-etape="<?= $etape ?>">
+
     <?= csrfField() ?>
     <input type="hidden" name="etape" id="input-etape" value="<?= $etape ?>">
 
-    <!-- ==================== ÉTAPE 1 : IDENTIFICATION ==================== -->
-    <div class="wizard-step <?= $etape === 1 ? 'active' : '' ?>" id="step-1">
-        <div class="card border-0 shadow-sm">
+    <!-- ══════════ ÉTAPE 1 : IDENTIFICATION ══════════ -->
+    <div class="form-section <?= $etape === 1 ? 'active' : '' ?>" id="etape-1">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom py-3">
-                <h6 class="mb-0"><i class="bi bi-building me-2 text-primary"></i>Étape 1 – Identification de l'entreprise</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-building text-primary me-2"></i>Étape 1 – Identification de l'entreprise</h6>
             </div>
             <div class="card-body">
                 <div class="row g-3">
@@ -235,13 +215,14 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                 </div>
             </div>
         </div>
+        <?= partialNavButtons(1, 7, $canEdit, $decId) ?>
     </div>
 
-    <!-- ==================== ÉTAPE 2 : EFFECTIFS MENSUELS ==================== -->
-    <div class="wizard-step <?= $etape === 2 ? 'active' : '' ?>" id="step-2">
-        <div class="card border-0 shadow-sm">
+    <!-- ══════════ ÉTAPE 2 : EFFECTIFS MENSUELS ══════════ -->
+    <div class="form-section <?= $etape === 2 ? 'active' : '' ?>" id="etape-2">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom py-3">
-                <h6 class="mb-0"><i class="bi bi-calendar3 me-2 text-primary"></i>Étape 2 – Effectifs mensuels</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-calendar3 text-primary me-2"></i>Étape 2 – Effectifs mensuels</h6>
             </div>
             <div class="card-body">
                 <p class="text-muted small mb-3">Indiquez le nombre total d'employés pour chaque mois de l'année.</p>
@@ -258,7 +239,8 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                             <tr>
                                 <?php for ($m = 1; $m <= 12; $m++): ?>
                                     <td>
-                                        <input type="number" name="effectifs[<?= $m ?>]"
+                                        <input type="number"
+                                               name="effectifs[<?= $m ?>]"
                                                class="form-control form-control-sm text-center px-1"
                                                value="<?= (int)($data['effectifs_mensuels'][$m] ?? 0) ?>"
                                                min="0" style="width:70px"
@@ -267,6 +249,13 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                                 <?php endfor; ?>
                             </tr>
                         </tbody>
+                        <tfoot class="table-secondary total-row fw-bold">
+                            <tr>
+                                <td colspan="6" class="text-end pe-3">Somme / Max / Moyenne :</td>
+                                <td colspan="3" class="text-center total-cell" id="eff-sum">0</td>
+                                <td colspan="3" class="text-center text-muted" id="eff-avg">0</td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
                 <div class="row mt-3">
@@ -291,13 +280,14 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                 </div>
             </div>
         </div>
+        <?= partialNavButtons(2, 7, $canEdit, $decId) ?>
     </div>
 
-    <!-- ==================== ÉTAPE 3 : CATÉGORIES ==================== -->
-    <div class="wizard-step <?= $etape === 3 ? 'active' : '' ?>" id="step-3">
-        <div class="card border-0 shadow-sm">
+    <!-- ══════════ ÉTAPE 3 : CATÉGORIES ══════════ -->
+    <div class="form-section <?= $etape === 3 ? 'active' : '' ?>" id="etape-3">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom py-3">
-                <h6 class="mb-0"><i class="bi bi-people me-2 text-primary"></i>Étape 3 – Effectifs par catégorie et origine</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-people text-primary me-2"></i>Étape 3 – Effectifs par catégorie et origine</h6>
             </div>
             <div class="card-body">
                 <p class="text-muted small mb-3">Renseignez les effectifs par catégorie professionnelle, origine et sexe.</p>
@@ -325,19 +315,20 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                                     <td class="fw-semibold small"><?= $label ?></td>
                                     <?php foreach (['nigeriens_h','nigeriens_f','africains_h','africains_f','autres_nat_h','autres_nat_f'] as $field): ?>
                                         <td>
-                                            <input type="number" name="categories[<?= $key ?>][<?= $field ?>]"
+                                            <input type="number"
+                                                   name="categories[<?= $key ?>][<?= $field ?>]"
                                                    class="form-control form-control-sm text-center px-1 cat-input"
                                                    value="<?= (int)($row[$field] ?? 0) ?>"
                                                    min="0" data-cat="<?= $key ?>"
                                                    <?= !$canEdit ? 'readonly' : '' ?>>
                                         </td>
                                     <?php endforeach; ?>
-                                    <td class="bg-light fw-bold text-center" id="tot-h-<?= $key ?>">0</td>
-                                    <td class="bg-light fw-bold text-center" id="tot-f-<?= $key ?>">0</td>
+                                    <td class="bg-light fw-bold text-center total-cell" id="tot-h-<?= $key ?>">0</td>
+                                    <td class="bg-light fw-bold text-center total-cell" id="tot-f-<?= $key ?>">0</td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
-                        <tfoot class="table-secondary fw-bold">
+                        <tfoot class="table-secondary fw-bold total-row">
                             <tr>
                                 <td>TOTAL</td>
                                 <td class="text-center" id="gtot-nih">0</td>
@@ -346,28 +337,27 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                                 <td class="text-center" id="gtot-aff">0</td>
                                 <td class="text-center" id="gtot-auh">0</td>
                                 <td class="text-center" id="gtot-auf">0</td>
-                                <td class="text-center" id="gtot-h">0</td>
-                                <td class="text-center" id="gtot-f">0</td>
+                                <td class="text-center bg-light" id="gtot-h">0</td>
+                                <td class="text-center bg-light" id="gtot-f">0</td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
             </div>
         </div>
+        <?= partialNavButtons(3, 7, $canEdit, $decId) ?>
     </div>
 
-    <!-- ==================== ÉTAPE 4 : NIVEAUX D'INSTRUCTION ==================== -->
-    <div class="wizard-step <?= $etape === 4 ? 'active' : '' ?>" id="step-4">
-        <div class="card border-0 shadow-sm">
+    <!-- ══════════ ÉTAPE 4 : NIVEAUX D'INSTRUCTION ══════════ -->
+    <div class="form-section <?= $etape === 4 ? 'active' : '' ?>" id="etape-4">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom py-3">
-                <h6 class="mb-0"><i class="bi bi-mortarboard me-2 text-primary"></i>Étape 4 – Niveaux d'instruction</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-mortarboard text-primary me-2"></i>Étape 4 – Niveaux d'instruction</h6>
             </div>
             <div class="card-body">
                 <?php foreach (CATEGORIES_PROFESSIONNELLES as $catKey => $catLabel): ?>
-                    <div class="mb-4">
-                        <h6 class="fw-semibold text-secondary border-bottom pb-2">
-                            <i class="bi bi-person-workspace me-1"></i><?= $catLabel ?>
-                        </h6>
+                    <div class="mb-4 fieldset-section">
+                        <h6 class="section-title"><i class="bi bi-person-workspace me-1"></i><?= $catLabel ?></h6>
                         <div class="table-responsive">
                             <table class="table table-bordered table-saisie table-sm align-middle">
                                 <thead class="table-light">
@@ -380,28 +370,30 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                                 </thead>
                                 <tbody>
                                     <?php foreach (NIVEAUX_INSTRUCTION as $nivKey => $nivLabel): ?>
-                                        <?php $row = $data['niveaux'][$catKey][$nivKey] ?? []; ?>
+                                        <?php $rowN = $data['niveaux'][$catKey][$nivKey] ?? []; ?>
                                         <tr>
                                             <td class="small"><?= $nivLabel ?></td>
                                             <td>
-                                                <input type="number" name="niveaux[<?= $catKey ?>][<?= $nivKey ?>][h]"
+                                                <input type="number"
+                                                       name="niveaux[<?= $catKey ?>][<?= $nivKey ?>][h]"
                                                        class="form-control form-control-sm text-center niv-input"
-                                                       value="<?= (int)($row['effectif_h'] ?? 0) ?>"
+                                                       value="<?= (int)($rowN['effectif_h'] ?? 0) ?>"
                                                        min="0" data-niv-row="<?= $catKey ?>-<?= $nivKey ?>"
                                                        <?= !$canEdit ? 'readonly' : '' ?>>
                                             </td>
                                             <td>
-                                                <input type="number" name="niveaux[<?= $catKey ?>][<?= $nivKey ?>][f]"
+                                                <input type="number"
+                                                       name="niveaux[<?= $catKey ?>][<?= $nivKey ?>][f]"
                                                        class="form-control form-control-sm text-center niv-input"
-                                                       value="<?= (int)($row['effectif_f'] ?? 0) ?>"
+                                                       value="<?= (int)($rowN['effectif_f'] ?? 0) ?>"
                                                        min="0" data-niv-row="<?= $catKey ?>-<?= $nivKey ?>"
                                                        <?= !$canEdit ? 'readonly' : '' ?>>
                                             </td>
-                                            <td class="bg-light text-center fw-bold" id="niv-tot-<?= $catKey ?>-<?= $nivKey ?>">0</td>
+                                            <td class="bg-light text-center fw-bold total-cell" id="niv-tot-<?= $catKey ?>-<?= $nivKey ?>">0</td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
-                                <tfoot class="table-secondary fw-bold">
+                                <tfoot class="table-secondary fw-bold total-row">
                                     <tr>
                                         <td>Total <?= $catLabel ?></td>
                                         <td class="text-center" id="niv-sh-<?= $catKey ?>">0</td>
@@ -415,21 +407,23 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                 <?php endforeach; ?>
             </div>
         </div>
+        <?= partialNavButtons(4, 7, $canEdit, $decId) ?>
     </div>
 
-    <!-- ==================== ÉTAPE 5 : FORMATION PROFESSIONNELLE ==================== -->
-    <div class="wizard-step <?= $etape === 5 ? 'active' : '' ?>" id="step-5">
+    <!-- ══════════ ÉTAPE 5 : FORMATION PROFESSIONNELLE ══════════ -->
+    <div class="form-section <?= $etape === 5 ? 'active' : '' ?>" id="etape-5">
         <?php $formation = ($data['formations'] ?? [[]])[0] ?? []; ?>
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom py-3">
-                <h6 class="mb-0"><i class="bi bi-award me-2 text-primary"></i>Étape 5 – Formation professionnelle</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-award text-primary me-2"></i>Étape 5 – Formation professionnelle</h6>
             </div>
             <div class="card-body">
                 <div class="mb-4">
                     <label class="form-label fw-semibold">L'entreprise a-t-elle effectué des formations cette année ?</label>
                     <div class="d-flex gap-4">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="a_eu_formation" id="form-oui" value="1"
+                            <input class="form-check-input" type="radio" name="a_eu_formation"
+                                   id="form-oui" value="1"
                                    <?= ($formation['a_eu_formation'] ?? false) ? 'checked' : '' ?>
                                    <?= !$canEdit ? 'disabled' : '' ?>>
                             <label class="form-check-label fw-semibold text-success" for="form-oui">
@@ -437,7 +431,8 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                             </label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="a_eu_formation" id="form-non" value="0"
+                            <input class="form-check-input" type="radio" name="a_eu_formation"
+                                   id="form-non" value="0"
                                    <?= !($formation['a_eu_formation'] ?? false) ? 'checked' : '' ?>
                                    <?= !$canEdit ? 'disabled' : '' ?>>
                             <label class="form-check-label fw-semibold text-secondary" for="form-non">
@@ -446,7 +441,8 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                         </div>
                     </div>
                 </div>
-                <div id="bloc-formation" <?= !($formation['a_eu_formation'] ?? false) ? 'style="display:none"' : '' ?>>
+                <!-- id="formation-details" requis par saisie.js -->
+                <div id="formation-details" <?= !($formation['a_eu_formation'] ?? false) ? 'style="display:none"' : '' ?>>
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Qualification visée</label>
@@ -488,17 +484,18 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                 </div>
             </div>
         </div>
+        <?= partialNavButtons(5, 7, $canEdit, $decId) ?>
     </div>
 
-    <!-- ==================== ÉTAPE 6 : PERTES D'EMPLOI ==================== -->
-    <div class="wizard-step <?= $etape === 6 ? 'active' : '' ?>" id="step-6">
+    <!-- ══════════ ÉTAPE 6 : PERTES D'EMPLOI ══════════ -->
+    <div class="form-section <?= $etape === 6 ? 'active' : '' ?>" id="etape-6">
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom py-3">
-                <h6 class="mb-0"><i class="bi bi-person-dash me-2 text-primary"></i>Étape 6 – Pertes d'emploi et perspectives</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-person-dash text-primary me-2"></i>Étape 6 – Pertes d'emploi et perspectives</h6>
             </div>
             <div class="card-body">
-                <h6 class="fw-semibold text-secondary mb-3">Pertes d'emploi par motif</h6>
-                <div class="table-responsive">
+                <h6 class="section-title">Pertes d'emploi par motif</h6>
+                <div class="table-responsive mb-4">
                     <table class="table table-bordered table-saisie align-middle">
                         <thead class="table-primary">
                             <tr>
@@ -511,30 +508,32 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                         </thead>
                         <tbody>
                             <?php foreach (MOTIFS_PERTE_EMPLOI as $motifKey => $motifLabel): ?>
-                                <?php $row = $data['pertes'][$motifKey] ?? []; ?>
+                                <?php $rowP = $data['pertes'][$motifKey] ?? []; ?>
                                 <tr>
                                     <td class="fw-semibold"><?= $motifLabel ?></td>
                                     <td>
-                                        <input type="number" name="pertes[<?= $motifKey ?>][h]"
+                                        <input type="number"
+                                               name="pertes[<?= $motifKey ?>][h]"
                                                class="form-control form-control-sm text-center perte-input"
-                                               value="<?= (int)($row['effectif_h'] ?? 0) ?>"
+                                               value="<?= (int)($rowP['effectif_h'] ?? 0) ?>"
                                                min="0" data-perte="<?= $motifKey ?>"
                                                <?= !$canEdit ? 'readonly' : '' ?>>
                                     </td>
                                     <td>
-                                        <input type="number" name="pertes[<?= $motifKey ?>][f]"
+                                        <input type="number"
+                                               name="pertes[<?= $motifKey ?>][f]"
                                                class="form-control form-control-sm text-center perte-input"
-                                               value="<?= (int)($row['effectif_f'] ?? 0) ?>"
+                                               value="<?= (int)($rowP['effectif_f'] ?? 0) ?>"
                                                min="0" data-perte="<?= $motifKey ?>"
                                                <?= !$canEdit ? 'readonly' : '' ?>>
                                     </td>
-                                    <td class="bg-light text-center fw-bold" id="perte-tot-<?= $motifKey ?>">0</td>
+                                    <td class="bg-light text-center fw-bold total-cell" id="perte-tot-<?= $motifKey ?>">0</td>
                                     <td>
                                         <?php if ($motifKey === 'autres'): ?>
                                             <input type="text" name="pertes[autres][autre_precision]"
                                                    class="form-control form-control-sm"
                                                    placeholder="Préciser…"
-                                                   value="<?= e($row['motif_autre'] ?? '') ?>"
+                                                   value="<?= e($rowP['motif_autre'] ?? '') ?>"
                                                    <?= !$canEdit ? 'readonly' : '' ?>>
                                         <?php else: ?>
                                             <span class="text-muted">—</span>
@@ -543,7 +542,7 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
-                        <tfoot class="table-secondary fw-bold">
+                        <tfoot class="table-secondary fw-bold total-row">
                             <tr>
                                 <td>TOTAL</td>
                                 <td class="text-center" id="ptot-h">0</td>
@@ -555,8 +554,7 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                     </table>
                 </div>
 
-                <!-- Perspectives -->
-                <h6 class="fw-semibold text-secondary mt-4 mb-3">Perspectives d'emploi pour la prochaine période</h6>
+                <h6 class="section-title">Perspectives d'emploi pour la prochaine période</h6>
                 <?php $persp = $data['perspective'] ?? []; ?>
                 <div class="row g-3">
                     <div class="col-md-6">
@@ -577,13 +575,14 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                 </div>
             </div>
         </div>
+        <?= partialNavButtons(6, 7, $canEdit, $decId) ?>
     </div>
 
-    <!-- ==================== ÉTAPE 7 : EFFECTIFS ÉTRANGERS ==================== -->
-    <div class="wizard-step <?= $etape === 7 ? 'active' : '' ?>" id="step-7">
-        <div class="card border-0 shadow-sm">
+    <!-- ══════════ ÉTAPE 7 : EFFECTIFS ÉTRANGERS ══════════ -->
+    <div class="form-section <?= $etape === 7 ? 'active' : '' ?>" id="etape-7">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="bi bi-globe me-2 text-primary"></i>Étape 7 – Effectifs étrangers</h6>
+                <h6 class="mb-0 fw-bold"><i class="bi bi-globe text-primary me-2"></i>Étape 7 – Effectifs étrangers</h6>
                 <?php if ($canEdit): ?>
                     <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-etranger">
                         <i class="bi bi-plus-lg me-1"></i>Ajouter une ligne
@@ -593,32 +592,33 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
             <div class="card-body">
                 <p class="text-muted small mb-3">Liste des travailleurs étrangers (hors Nigériens) employés dans l'entreprise.</p>
                 <div class="table-responsive">
-                    <table class="table table-bordered table-sm align-middle" id="table-etrangers">
+                    <table class="table table-bordered table-sm align-middle table-etrangers">
                         <thead class="table-primary">
                             <tr>
                                 <th>Pays</th>
                                 <th>Qualification</th>
                                 <th>Fonction</th>
-                                <th class="text-center" style="width:80px">Sexe</th>
+                                <th class="text-center" style="width:70px">Sexe</th>
                                 <th class="text-center" style="width:80px">Nombre</th>
-                                <?php if ($canEdit): ?><th class="text-center" style="width:50px">—</th><?php endif; ?>
+                                <?php if ($canEdit): ?><th class="text-center" style="width:50px">×</th><?php endif; ?>
                             </tr>
                         </thead>
-                        <tbody id="tbody-etrangers">
+                        <!-- id="etrangers-tbody" requis par saisie.js -->
+                        <tbody id="etrangers-tbody">
                             <?php if (!empty($data['etrangers'])): ?>
-                                <?php foreach ($data['etrangers'] as $i => $e): ?>
+                                <?php foreach ($data['etrangers'] as $i => $et): ?>
                                     <tr class="etrangers-row">
-                                        <td><input type="text" name="etrangers[<?= $i ?>][pays]" class="form-control form-control-sm" value="<?= e($e['pays']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
-                                        <td><input type="text" name="etrangers[<?= $i ?>][qualification]" class="form-control form-control-sm" value="<?= e($e['qualification'] ?? '') ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
-                                        <td><input type="text" name="etrangers[<?= $i ?>][fonction]" class="form-control form-control-sm" value="<?= e($e['fonction'] ?? '') ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
+                                        <td><input type="text" name="etrangers[<?= $i ?>][pays]" class="form-control form-control-sm" value="<?= e($et['pays']) ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
+                                        <td><input type="text" name="etrangers[<?= $i ?>][qualification]" class="form-control form-control-sm" value="<?= e($et['qualification'] ?? '') ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
+                                        <td><input type="text" name="etrangers[<?= $i ?>][fonction]" class="form-control form-control-sm" value="<?= e($et['fonction'] ?? '') ?>" <?= !$canEdit ? 'readonly' : '' ?>></td>
                                         <td>
                                             <select name="etrangers[<?= $i ?>][sexe]" class="form-select form-select-sm" <?= !$canEdit ? 'disabled' : '' ?>>
-                                                <option value="H" <?= ($e['sexe'] ?? 'H') === 'H' ? 'selected' : '' ?>>H</option>
-                                                <option value="F" <?= ($e['sexe'] ?? '') === 'F' ? 'selected' : '' ?>>F</option>
+                                                <option value="H" <?= ($et['sexe'] ?? 'H') === 'H' ? 'selected' : '' ?>>H</option>
+                                                <option value="F" <?= ($et['sexe'] ?? '') === 'F' ? 'selected' : '' ?>>F</option>
                                             </select>
                                         </td>
-                                        <td><input type="number" name="etrangers[<?= $i ?>][nombre]" class="form-control form-control-sm text-center" value="<?= (int)($e['nombre'] ?? 0) ?>" min="0" <?= !$canEdit ? 'readonly' : '' ?>></td>
-                                        <?php if ($canEdit): ?><td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-rm-etranger"><i class="bi bi-trash"></i></button></td><?php endif; ?>
+                                        <td><input type="number" name="etrangers[<?= $i ?>][nombre]" class="form-control form-control-sm text-center" value="<?= (int)($et['nombre'] ?? 0) ?>" min="0" <?= !$canEdit ? 'readonly' : '' ?>></td>
+                                        <?php if ($canEdit): ?><td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td><?php endif; ?>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>
@@ -629,38 +629,30 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- ==================== BOUTONS DE NAVIGATION ==================== -->
-    <div class="d-flex justify-content-between align-items-center mt-3 mb-4">
-        <div>
-            <button type="button" class="btn btn-outline-secondary" id="btn-prev" <?= $etape <= 1 ? 'disabled' : '' ?>>
+        <!-- Boutons finaux étape 7 -->
+        <div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+            <button type="button" class="btn btn-outline-secondary btn-prev">
                 <i class="bi bi-arrow-left me-1"></i>Précédent
             </button>
-        </div>
-        <div class="d-flex gap-2">
-            <?php if ($canEdit): ?>
-                <button type="button" class="btn btn-outline-success" id="btn-save-only">
-                    <i class="bi bi-floppy me-1"></i>Sauvegarder
-                </button>
-            <?php endif; ?>
-            <?php if ($etape < 7): ?>
-                <button type="submit" class="btn btn-primary" id="btn-next">
-                    Suivant <i class="bi bi-arrow-right ms-1"></i>
-                </button>
-            <?php else: ?>
+            <div class="d-flex gap-2">
                 <?php if ($canEdit): ?>
-                    <button type="submit" class="btn btn-success" id="btn-save-final">
+                    <button type="submit" class="btn btn-success btn-save">
                         <i class="bi bi-floppy me-1"></i>Sauvegarder
                     </button>
-                    <button type="button" class="btn btn-primary" id="btn-soumettre"
-                            data-url="<?= url("agent/declaration/$decId/soumettre") ?>">
+                    <button type="button" class="btn btn-primary btn-submit"
+                            data-bs-toggle="modal" data-bs-target="#modal-soumettre">
                         <i class="bi bi-send me-1"></i>Soumettre à l'ANPE
                     </button>
+                <?php else: ?>
+                    <a href="<?= url("agent/declaration/$decId/apercu") ?>" class="btn btn-info">
+                        <i class="bi bi-eye me-1"></i>Voir l'aperçu
+                    </a>
                 <?php endif; ?>
-            <?php endif; ?>
+            </div>
         </div>
     </div>
+
 </form>
 
 <!-- Modal confirmation soumission -->
@@ -676,105 +668,77 @@ $pct     = $declaration['pourcentage_completion'] ?? 0;
                     <i class="bi bi-exclamation-triangle me-2"></i>
                     <strong>Attention !</strong> Une fois soumise, la déclaration ne pourra plus être modifiée sans validation de l'administration.
                 </div>
-                <p>Voulez-vous soumettre définitivement la déclaration 
-                   <strong><?= e($declaration['code_questionnaire'] ?? '') ?></strong> de 
+                <p>Voulez-vous soumettre définitivement la déclaration
+                   <strong><?= e($declaration['code_questionnaire'] ?? '') ?></strong> de
                    <strong><?= e($entreprise['raison_sociale'] ?? '') ?></strong> ?
                 </p>
+                <p class="text-muted small">Complétude actuelle : <strong><?= $pct ?>%</strong></p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <form method="POST" id="form-soumettre" action="<?= url("agent/declaration/$decId/soumettre") ?>" style="display:inline">
-                    <?= csrfField() ?>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-send me-1"></i>Oui, soumettre
-                    </button>
-                </form>
+                <button type="button" class="btn btn-primary btn-submit" id="btn-confirm-soumettre">
+                    <i class="bi bi-send me-1"></i>Oui, soumettre
+                </button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Script inline complémentaire (calculs spécifiques non couverts par saisie.js) -->
 <script>
-const CURRENT_STEP = <?= $etape ?>;
-const CAN_EDIT     = <?= $canEdit ? 'true' : 'false' ?>;
-let currentStep    = CURRENT_STEP;
-let etrangerIdx    = <?= count($data['etrangers'] ?? []) ?>;
-
-// ── Navigation ──────────────────────────────────────────────────
-function goToStep(n) {
-    const url = new URL(window.location.href);
-    url.searchParams.set('etape', n);
-    window.location.href = url.toString();
-}
-
-document.getElementById('btn-prev')?.addEventListener('click', () => {
-    if (currentStep > 1) goToStep(currentStep - 1);
-});
-
-document.getElementById('btn-save-only')?.addEventListener('click', () => {
-    document.getElementById('form-saisie').submit();
-});
-
-document.getElementById('btn-soumettre')?.addEventListener('click', () => {
-    new bootstrap.Modal(document.getElementById('modal-soumettre')).show();
-});
-
-// ── Étape 2 : Calcul automatique effectifs mensuels ──────────────
+// Calcul effectifs mensuels
 function calcMensuels() {
-    const inputs = document.querySelectorAll('#step-2 input[type=number]');
+    const inputs = document.querySelectorAll('#etape-2 input[type=number]');
     let sum = 0, max = 0;
     inputs.forEach(i => {
         const v = parseInt(i.value) || 0;
         sum += v;
         if (v > max) max = v;
     });
-    const tot = document.getElementById('total-mensuel');
-    const mx  = document.getElementById('max-mensuel');
-    const mo  = document.getElementById('moy-mensuel');
-    if (tot) tot.textContent = sum;
-    if (mx)  mx.textContent  = max;
-    if (mo)  mo.textContent  = Math.round(sum / 12);
+    const t = document.getElementById('total-mensuel');
+    const m = document.getElementById('max-mensuel');
+    const a = document.getElementById('moy-mensuel');
+    if (t) t.textContent = sum;
+    if (m) m.textContent = max;
+    if (a) a.textContent = Math.round(sum / 12);
 }
-document.querySelectorAll('#step-2 input[type=number]').forEach(i => {
-    i.addEventListener('input', calcMensuels);
-});
+document.querySelectorAll('#etape-2 input[type=number]').forEach(i => i.addEventListener('input', calcMensuels));
 calcMensuels();
 
-// ── Étape 3 : Calcul catégories ──────────────────────────────────
+// Calcul catégories
 function calcCategories() {
     const cats = <?= json_encode(array_keys(CATEGORIES_PROFESSIONNELLES)) ?>;
     let gNiH=0,gNiF=0,gAfH=0,gAfF=0,gAuH=0,gAuF=0;
     cats.forEach(cat => {
-        const fields = ['nigeriens_h','nigeriens_f','africains_h','africains_f','autres_nat_h','autres_nat_f'];
-        const vals = {};
-        fields.forEach(f => {
-            const el = document.querySelector(`input[name="categories[${cat}][${f}]"]`);
-            vals[f] = el ? (parseInt(el.value)||0) : 0;
+        const f = ['nigeriens_h','nigeriens_f','africains_h','africains_f','autres_nat_h','autres_nat_f'];
+        const v = {};
+        f.forEach(fld => {
+            const el = document.querySelector(`input[name="categories[${cat}][${fld}]"]`);
+            v[fld] = el ? (parseInt(el.value)||0) : 0;
         });
-        gNiH+=vals.nigeriens_h; gNiF+=vals.nigeriens_f;
-        gAfH+=vals.africains_h; gAfF+=vals.africains_f;
-        gAuH+=vals.autres_nat_h; gAuF+=vals.autres_nat_f;
-        const totH = vals.nigeriens_h + vals.africains_h + vals.autres_nat_h;
-        const totF = vals.nigeriens_f + vals.africains_f + vals.autres_nat_f;
+        gNiH+=v.nigeriens_h; gNiF+=v.nigeriens_f;
+        gAfH+=v.africains_h; gAfF+=v.africains_f;
+        gAuH+=v.autres_nat_h; gAuF+=v.autres_nat_f;
         const tH = document.getElementById(`tot-h-${cat}`);
         const tF = document.getElementById(`tot-f-${cat}`);
-        if (tH) tH.textContent = totH;
-        if (tF) tF.textContent = totF;
+        if (tH) tH.textContent = v.nigeriens_h + v.africains_h + v.autres_nat_h;
+        if (tF) tF.textContent = v.nigeriens_f + v.africains_f + v.autres_nat_f;
     });
-    ['gtot-nih','gtot-nif','gtot-afh','gtot-aff','gtot-auh','gtot-auf','gtot-h','gtot-f'].forEach((id,i) => {
+    [['gtot-nih',gNiH],['gtot-nif',gNiF],['gtot-afh',gAfH],['gtot-aff',gAfF],
+     ['gtot-auh',gAuH],['gtot-auf',gAuF],['gtot-h',gNiH+gAfH+gAuH],['gtot-f',gNiF+gAfF+gAuF]].forEach(([id,val]) => {
         const el = document.getElementById(id);
-        if (el) el.textContent = [gNiH,gNiF,gAfH,gAfF,gAuH,gAuF,gNiH+gAfH+gAuH,gNiF+gAfF+gAuF][i];
+        if(el) el.textContent = val;
     });
 }
 document.querySelectorAll('.cat-input').forEach(i => i.addEventListener('input', calcCategories));
 calcCategories();
 
-// ── Étape 4 : Calcul niveaux ─────────────────────────────────────
+// Calcul niveaux instruction
 function calcNiveaux() {
     const cats = <?= json_encode(array_keys(CATEGORIES_PROFESSIONNELLES)) ?>;
     const nivs = <?= json_encode(array_keys(NIVEAUX_INSTRUCTION)) ?>;
     cats.forEach(cat => {
-        let sH=0,sF=0;
+        let sH=0, sF=0;
         nivs.forEach(niv => {
             const h = parseInt(document.querySelector(`input[name="niveaux[${cat}][${niv}][h]"]`)?.value)||0;
             const f = parseInt(document.querySelector(`input[name="niveaux[${cat}][${niv}][f]"]`)?.value)||0;
@@ -785,23 +749,15 @@ function calcNiveaux() {
         const sh = document.getElementById(`niv-sh-${cat}`);
         const sf = document.getElementById(`niv-sf-${cat}`);
         const st = document.getElementById(`niv-st-${cat}`);
-        if(sh) sh.textContent=sH;
-        if(sf) sf.textContent=sF;
-        if(st) st.textContent=sH+sF;
+        if(sh) sh.textContent = sH;
+        if(sf) sf.textContent = sF;
+        if(st) st.textContent = sH+sF;
     });
 }
 document.querySelectorAll('.niv-input').forEach(i => i.addEventListener('input', calcNiveaux));
 calcNiveaux();
 
-// ── Étape 5 : Afficher/Masquer bloc formation ────────────────────
-document.querySelectorAll('input[name=a_eu_formation]').forEach(r => {
-    r.addEventListener('change', () => {
-        const bloc = document.getElementById('bloc-formation');
-        if (bloc) bloc.style.display = r.value === '1' ? '' : 'none';
-    });
-});
-
-// ── Étape 6 : Calcul pertes ──────────────────────────────────────
+// Calcul pertes d'emploi
 function calcPertes() {
     const motifs = <?= json_encode(array_keys(MOTIFS_PERTE_EMPLOI)) ?>;
     let tH=0, tF=0;
@@ -815,34 +771,57 @@ function calcPertes() {
     const ph = document.getElementById('ptot-h');
     const pf = document.getElementById('ptot-f');
     const pt = document.getElementById('ptot-t');
-    if(ph) ph.textContent=tH;
-    if(pf) pf.textContent=tF;
-    if(pt) pt.textContent=tH+tF;
+    if(ph) ph.textContent = tH;
+    if(pf) pf.textContent = tF;
+    if(pt) pt.textContent = tH+tF;
 }
 document.querySelectorAll('.perte-input').forEach(i => i.addEventListener('input', calcPertes));
 calcPertes();
 
-// ── Étape 7 : Ajout/Suppression lignes étrangers ─────────────────
-function makeRow(idx) {
-    return `<tr class="etrangers-row">
-        <td><input type="text" name="etrangers[${idx}][pays]" class="form-control form-control-sm" placeholder="Pays"></td>
-        <td><input type="text" name="etrangers[${idx}][qualification]" class="form-control form-control-sm" placeholder="Qualification"></td>
-        <td><input type="text" name="etrangers[${idx}][fonction]" class="form-control form-control-sm" placeholder="Fonction"></td>
-        <td><select name="etrangers[${idx}][sexe]" class="form-select form-select-sm"><option value="H">H</option><option value="F">F</option></select></td>
-        <td><input type="number" name="etrangers[${idx}][nombre]" class="form-control form-control-sm text-center" value="0" min="0"></td>
-        <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-rm-etranger"><i class="bi bi-trash"></i></button></td>
-    </tr>`;
-}
+// Bouton "Confirmer soumission" dans le modal (déclenche la soumission AJAX)
+document.getElementById('btn-confirm-soumettre')?.addEventListener('click', async () => {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modal-soumettre'));
+    if (modal) modal.hide();
 
-document.getElementById('btn-add-etranger')?.addEventListener('click', () => {
-    const tbody = document.getElementById('tbody-etrangers');
-    const noRow = document.getElementById('row-no-etranger');
-    if(noRow) noRow.remove();
-    tbody.insertAdjacentHTML('beforeend', makeRow(etrangerIdx++));
-    document.querySelectorAll('.btn-rm-etranger').forEach(b => b.addEventListener('click', e => e.target.closest('tr').remove()));
-});
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+    const decId = document.getElementById('wizard-form')?.dataset.declId ?? 0;
+    const fd = new FormData();
+    fd.append('_csrf_token', csrf);
 
-document.querySelectorAll('.btn-rm-etranger').forEach(b => {
-    b.addEventListener('click', e => e.target.closest('tr').remove());
+    try {
+        const resp = await fetch(`<?= url("agent/declaration/$decId/soumettre") ?>`, {
+            method: 'POST', body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const json = await resp.json();
+        if (json.success) {
+            window.location.href = json.redirect ?? '<?= url("agent/declaration/$decId/apercu") ?>';
+        } else {
+            alert(json.message ?? 'Erreur lors de la soumission.');
+        }
+    } catch(e) {
+        alert('Erreur réseau. Veuillez réessayer.');
+    }
 });
 </script>
+
+<?php
+/**
+ * Génère les boutons de navigation (Précédent / Suivant+Sauvegarder) pour une étape
+ */
+function partialNavButtons(int $current, int $total, bool $canEdit, int $decId): string
+{
+    $html  = '<div class="d-flex justify-content-between align-items-center mt-3 mb-4">';
+    $html .= '<button type="button" class="btn btn-outline-secondary btn-prev"' . ($current <= 1 ? ' disabled' : '') . '>';
+    $html .= '<i class="bi bi-arrow-left me-1"></i>Précédent</button>';
+    $html .= '<div class="d-flex gap-2">';
+    if ($canEdit) {
+        $html .= '<button type="submit" class="btn btn-outline-success btn-save"><i class="bi bi-floppy me-1"></i>Sauvegarder</button>';
+    }
+    if ($current < $total) {
+        $html .= '<button type="button" class="btn btn-primary btn-next"><i class="bi bi-arrow-right me-1"></i>Suivant</button>';
+    }
+    $html .= '</div></div>';
+    return $html;
+}
+?>

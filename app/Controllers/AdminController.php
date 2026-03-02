@@ -1392,4 +1392,126 @@ HTML;
         logActivity('rappels_envoyes', 'campagnes', (int)$id, ['nb_agents' => $sent, 'jours' => $joursRestants]);
         redirectWith('admin/campagnes', 'success', "$sent rappel(s) envoyé(s) aux agents.");
     }
+
+    /**
+     * Supprimer un utilisateur (soft delete : désactivation)
+     */
+    public function supprimerUtilisateur(string $id): void
+    {
+        $this->requireCsrf();
+        $user = $this->db->fetchOne("SELECT * FROM utilisateurs WHERE id = $1", [(int)$id]);
+        if (!$user) {
+            redirectWith('admin/utilisateurs', 'error', 'Utilisateur introuvable.');
+        }
+        if ($user['role'] === ROLE_SUPER_ADMIN) {
+            redirectWith('admin/utilisateurs', 'error', 'Impossible de supprimer un super-administrateur.');
+        }
+        $this->db->execute(
+            "UPDATE utilisateurs SET actif = FALSE, updated_at = NOW() WHERE id = $1",
+            [(int)$id]
+        );
+        logActivity('user_deleted', 'utilisateurs', (int)$id, ['email' => $user['email']]);
+        redirectWith('admin/utilisateurs', 'success', 'Utilisateur désactivé.');
+    }
+
+    /**
+     * Exporter une déclaration (alias vers exportPdf)
+     */
+    public function exporterDeclaration(string $id): void
+    {
+        $this->exportPdf($id);
+    }
+
+    /**
+     * Formulaire de modification d'une campagne
+     */
+    public function modifierCampagne(string $id): void
+    {
+        $campagne = $this->db->fetchOne("SELECT * FROM campagnes_damo WHERE id = $1", [(int)$id]);
+        if (!$campagne) {
+            redirectWith('admin/campagnes', 'error', 'Campagne introuvable.');
+        }
+        $this->render('admin.campagne_form', [
+            'pageTitle' => 'Modifier la campagne - ' . APP_NAME,
+            'campagne'  => $campagne,
+            'mode'      => 'edit',
+            'breadcrumbs' => [
+                ['label' => 'Campagnes', 'url' => '/admin/campagnes'],
+                ['label' => 'Modifier', 'url' => false],
+            ],
+        ]);
+    }
+
+    /**
+     * Mettre à jour une campagne existante
+     */
+    public function updateCampagne(string $id): void
+    {
+        $this->requireCsrf();
+        $campagne = $this->db->fetchOne("SELECT * FROM campagnes_damo WHERE id = $1", [(int)$id]);
+        if (!$campagne) {
+            redirectWith('admin/campagnes', 'error', 'Campagne introuvable.');
+        }
+
+        $libelle     = sanitize(post('libelle', ''));
+        $dateDebut   = post('date_debut', '');
+        $dateFin     = post('date_fin', '');
+        $description = sanitize(post('description', ''));
+        $actif       = post('actif') === '1';
+
+        if (!$libelle || !$dateDebut || !$dateFin) {
+            redirectWith("admin/campagne/$id/modifier", 'error', 'Tous les champs obligatoires doivent être remplis.');
+        }
+
+        if ($actif) {
+            // Désactiver toutes les autres campagnes
+            $this->db->execute("UPDATE campagnes_damo SET actif = FALSE WHERE id != $1", [(int)$id]);
+        }
+
+        $this->db->execute(
+            "UPDATE campagnes_damo SET libelle=$1, date_debut=$2, date_fin=$3, description=$4, actif=$5, updated_at=NOW() WHERE id=$6",
+            [$libelle, $dateDebut, $dateFin, $description, $actif, (int)$id]
+        );
+
+        logActivity('campaign_updated', 'campagnes', (int)$id, ['libelle' => $libelle]);
+        redirectWith('admin/campagnes', 'success', "Campagne \"$libelle\" mise à jour.");
+    }
+
+    /**
+     * Sauvegarder une branche d'activité (création ou modification)
+     */
+    public function sauvegarderBranche(): void
+    {
+        $this->requireCsrf();
+        $id      = (int) post('id', 0);
+        $code    = sanitize(post('code', ''));
+        $libelle = sanitize(post('libelle', ''));
+        $actif   = post('actif', '1') === '1';
+
+        if (!$code || !$libelle) {
+            redirectWith('admin/branches', 'error', 'Le code et le libellé sont obligatoires.');
+        }
+
+        if ($id > 0) {
+            // Modification
+            $this->db->execute(
+                "UPDATE branches_activite SET code=$1, libelle=$2, actif=$3, updated_at=NOW() WHERE id=$4",
+                [$code, $libelle, $actif, $id]
+            );
+            logActivity('branch_updated', 'branches_activite', $id);
+            redirectWith('admin/branches', 'success', "Branche \"$libelle\" mise à jour.");
+        } else {
+            // Création
+            $exists = $this->db->fetchScalar("SELECT id FROM branches_activite WHERE code = $1", [$code]);
+            if ($exists) {
+                redirectWith('admin/branches', 'error', "Le code \"$code\" est déjà utilisé.");
+            }
+            $this->db->insert(
+                "INSERT INTO branches_activite (code, libelle, actif) VALUES ($1, $2, $3)",
+                [$code, $libelle, $actif]
+            );
+            logActivity('branch_created', 'branches_activite', 0, ['code' => $code]);
+            redirectWith('admin/branches', 'success', "Branche \"$libelle\" créée.");
+        }
+    }
 }
