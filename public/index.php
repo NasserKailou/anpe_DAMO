@@ -64,13 +64,8 @@ if (!headers_sent()) {
 }
 
 // ── Rate limiting basique (anti-brute-force) ──
-// Enlever le préfixe de sous-dossier avant de comparer les chemins
-$_rawPath    = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-$_basePath   = defined('BASE_PATH') ? BASE_PATH : '';
-$requestPath = ($_basePath !== '' && str_starts_with($_rawPath, $_basePath))
-    ? substr($_rawPath, strlen($_basePath))
-    : $_rawPath;
-$requestPath = '/' . ltrim($requestPath, '/');
+// Utiliser la même normalisation que le Router pour être cohérent
+$requestPath = \App\Helpers\Router::normalizeUri();
 if (in_array($requestPath, ['/login', '/mot-de-passe-oublie'])
     && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $rateLimitKey = 'rl_' . md5(($_SERVER['REMOTE_ADDR'] ?? '') . $requestPath);

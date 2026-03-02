@@ -60,6 +60,44 @@ class Router
     }
 
     /**
+     * Normaliser l'URI de la requête courante.
+     *
+     * Entrées possibles selon la configuration Apache :
+     *
+     *   XAMPP sous-dossier + .htaccess racine :
+     *     REQUEST_URI = /anpe_DAMO/public/login   → /login
+     *     REQUEST_URI = /anpe_DAMO/login          → /login
+     *
+     *   VirtualHost (DocumentRoot = public/) :
+     *     REQUEST_URI = /login                    → /login
+     *     REQUEST_URI = /admin/dashboard          → /admin/dashboard
+     */
+    public static function normalizeUri(): string
+    {
+        $uri  = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+        $uri  = rawurldecode($uri);
+        $base = defined('BASE_PATH') ? BASE_PATH : '';
+
+        // ── Étape 1 : enlever le préfixe BASE_PATH (/anpe_DAMO)
+        if ($base !== '' && str_starts_with($uri, $base)) {
+            $uri = substr($uri, strlen($base));
+        }
+
+        // ── Étape 2 : enlever un éventuel segment /public/ résiduel
+        //    (présent quand le .htaccess racine réécrit vers public/)
+        if ($uri === '/public' || $uri === '/public/') {
+            $uri = '/';
+        } elseif (str_starts_with($uri, '/public/')) {
+            $uri = substr($uri, strlen('/public'));
+        }
+
+        // ── Étape 3 : s'assurer que l'URI commence toujours par '/'
+        $uri = '/' . ltrim($uri, '/');
+
+        return ($uri === '') ? '/' : $uri;
+    }
+
+    /**
      * Dispatcher la requête courante
      */
     public static function dispatch(): void
@@ -70,26 +108,7 @@ class Router
             $method = strtoupper($_POST['_method']);
         }
 
-        // Obtenir l'URI sans query string, décodée, et sans le préfixe BASE_PATH
-        //
-        // Avec XAMPP sous-dossier  (RewriteBase /anpe_DAMO/) :
-        //   REQUEST_URI = /anpe_DAMO/login   →  uri = /login
-        //   REQUEST_URI = /anpe_DAMO/profil  →  uri = /profil
-        //
-        // Avec VirtualHost (RewriteBase /) :
-        //   REQUEST_URI = /login             →  uri = /login
-        $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-        $uri = rawurldecode($uri);
-
-        $basePath = defined('BASE_PATH') ? BASE_PATH : '';
-
-        // Supprimer le préfixe BASE_PATH (ex: /anpe_DAMO)
-        if ($basePath !== '' && str_starts_with($uri, $basePath)) {
-            $uri = substr($uri, strlen($basePath));
-        }
-
-        $uri = '/' . ltrim($uri, '/');
-        if ($uri === '') $uri = '/';
+        $uri = self::normalizeUri();
 
         foreach (self::$routes as $route) {
             if ($route['method'] !== $method && $route['method'] !== 'ANY') continue;

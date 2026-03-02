@@ -1,34 +1,51 @@
+# ==============================================================================
+# e-DAMO — .htaccess PUBLIC (anpe_DAMO/public/)
+# ==============================================================================
+#
+# Ce fichier gère le routage dans le dossier public/.
+# Il est universel : fonctionne sur XAMPP Windows ET Apache Linux.
+#
+# IMPORTANT : RewriteBase est calculée automatiquement par PHP (config.php).
+#             Ici on n'a PAS besoin de la changer selon l'installation.
+#
+# Scénario XAMPP sous-dossier :
+#   URL : http://localhost:8085/anpe_DAMO/login
+#   SCRIPT_NAME : /anpe_DAMO/public/index.php
+#   REQUEST_URI : /anpe_DAMO/public/login  (après réécriture racine)
+#   → BASE_PATH détecté = /anpe_DAMO   → route = /login  ✓
+#
+# Scénario VirtualHost (DocumentRoot = .../anpe_DAMO/public) :
+#   URL : https://edamo.anpe-niger.ne/login
+#   SCRIPT_NAME : /index.php
+#   REQUEST_URI : /login
+#   → BASE_PATH détecté = ''           → route = /login  ✓
+# ==============================================================================
+
 Options -Indexes
 ServerSignature Off
 
-RewriteEngine On
+<IfModule mod_rewrite.c>
+    RewriteEngine On
 
-# ─────────────────────────────────────────────────────────────
-# IMPORTANT : Choisir la RewriteBase selon votre installation
-#
-#   CAS 1 – sous-dossier XAMPP (htdocs/anpe_DAMO/)
-#            URL : http://localhost:8085/anpe_DAMO/login
-RewriteBase /anpe_DAMO/
-#
-#   CAS 2 – VirtualHost dédié (DocumentRoot = .../anpe_DAMO/public)
-#            URL : http://localhost:8085/login
-#RewriteBase /
-# ─────────────────────────────────────────────────────────────
+    # ── Bloquer les fichiers sensibles ─────────────────────────────────────────
+    RewriteRule ^\.env$                  - [F,L]
+    RewriteRule ^\.git                   - [F,L]
+    RewriteRule ^composer\.(json|lock)$  - [F,L]
 
-# Bloquer les fichiers sensibles
-RewriteRule ^\.env$                  - [F,L]
-RewriteRule ^\.git                   - [F,L]
-RewriteRule ^composer\.(json|lock)$  - [F,L]
+    # ── Bloquer les user-agents malveillants ───────────────────────────────────
+    RewriteCond %{HTTP_USER_AGENT} (nikto|sqlmap|masscan|nmap|python-requests) [NC]
+    RewriteRule ^ - [F,L]
 
-# Laisser passer les fichiers et dossiers qui existent vraiment (assets CSS/JS/img)
-RewriteCond %{REQUEST_FILENAME} -f [OR]
-RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^ - [L]
+    # ── Laisser passer les fichiers et dossiers existants (CSS, JS, images…) ───
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
 
-# Tout le reste → index.php (front controller)
-RewriteRule ^ index.php [QSA,L]
+    # ── Tout le reste → front-controller ──────────────────────────────────────
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
 
-# ── En-têtes de sécurité ─────────────────────────────────────
+# ── En-têtes de sécurité ────────────────────────────────────────────────────
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options  "nosniff"
     Header always set X-Frame-Options         "SAMEORIGIN"
@@ -36,14 +53,30 @@ RewriteRule ^ index.php [QSA,L]
     Header always set Referrer-Policy         "strict-origin-when-cross-origin"
 </IfModule>
 
-# ── GZIP ─────────────────────────────────────────────────────
-<IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json
+# ── Types MIME pour les polices Bootstrap Icons ─────────────────────────────
+<IfModule mod_mime.c>
+    AddType font/woff2  .woff2
+    AddType font/woff   .woff
+    AddType font/ttf    .ttf
+    AddType image/svg+xml .svg
 </IfModule>
 
-# ── Cache assets statiques ───────────────────────────────────
-<FilesMatch "\.(css|js|png|jpg|jpeg|gif|ico|woff|woff2|ttf|svg)$">
-    <IfModule mod_headers.c>
-        Header set Cache-Control "max-age=2592000, public"
-    </IfModule>
-</FilesMatch>
+# ── Compression GZIP ────────────────────────────────────────────────────────
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json font/woff2
+</IfModule>
+
+# ── Cache navigateur pour les assets statiques ──────────────────────────────
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css                  "access plus 30 days"
+    ExpiresByType application/javascript    "access plus 30 days"
+    ExpiresByType image/png                 "access plus 30 days"
+    ExpiresByType image/jpeg                "access plus 30 days"
+    ExpiresByType image/gif                 "access plus 30 days"
+    ExpiresByType image/svg+xml             "access plus 30 days"
+    ExpiresByType image/x-icon              "access plus 30 days"
+    ExpiresByType font/woff                 "access plus 1 year"
+    ExpiresByType font/woff2                "access plus 1 year"
+    ExpiresByType font/ttf                  "access plus 1 year"
+</IfModule>

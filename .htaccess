@@ -1,4 +1,46 @@
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ public/$1 [L]
+# ==============================================================================
+# e-DAMO — .htaccess RACINE (anpe_DAMO/)
+# ==============================================================================
+#
+# Ce fichier redirige TOUTES les requêtes vers le dossier public/.
+# Il fonctionne sur Windows (XAMPP) et Linux (Apache) sans modification.
+#
+# Structure attendue :
+#   htdocs/anpe_DAMO/           ← racine du projet (ici)
+#   htdocs/anpe_DAMO/public/    ← DocumentRoot réel (assets, index.php)
+#
+# Accès : http://localhost:8085/anpe_DAMO/login
+#         http://localhost:8085/anpe_DAMO/admin/dashboard
+# ==============================================================================
+
+Options -Indexes
+ServerSignature Off
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # ── 1. Ne pas réécrire les requêtes déjà dans public/ ──────────────────────
+    RewriteCond %{REQUEST_URI} ^/[^/]+/public/ [NC]
+    RewriteRule ^ - [L]
+
+    # ── 2. Ne pas réécrire les fichiers/dossiers qui existent réellement ───────
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # ── 3. Tout le reste → public/index.php ────────────────────────────────────
+    #    On utilise %{REQUEST_URI} pour construire le chemin complet
+    #    Apache préserve REQUEST_URI original grâce au flag [QSA,L]
+    RewriteRule ^(.*)$ public/index.php [QSA,L]
+</IfModule>
+
+# ── Bloquer l'accès aux fichiers sensibles ──────────────────────────────────
+<FilesMatch "^(\.env|\.env\.example|composer\.(json|lock)|\.git)">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
