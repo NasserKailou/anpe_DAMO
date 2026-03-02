@@ -94,6 +94,7 @@ Router::get('/admin/declarations', ['AdminController', 'declarations'], ['AuthMi
 Router::get('/admin/declaration/:id', ['AdminController', 'voirDeclaration'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::post('/admin/declaration/:id/valider', ['AdminController', 'validerDeclaration'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::post('/admin/declaration/:id/rejeter', ['AdminController', 'rejeterDeclaration'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/declaration/:id/retour-brouillon', ['AdminController', 'retourBrouillon'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::get('/admin/declaration/:id/exporter', ['AdminController', 'exporterDeclaration'], ['AuthMiddleware', 'AdminMiddleware']);
 
 // Exports
@@ -120,6 +121,8 @@ Router::get('/admin/campagne/nouvelle', ['AdminController', 'nouvelleCampagne'],
 Router::post('/admin/campagne/nouvelle', ['AdminController', 'creerCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::get('/admin/campagne/:id/modifier', ['AdminController', 'modifierCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::post('/admin/campagne/:id/modifier', ['AdminController', 'updateCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/campagne/:id/cloturer', ['AdminController', 'cloturerCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/campagne/:id/ouvrir', ['AdminController', 'ouvrirCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
 
 // Gestion des guides
 Router::get('/admin/guides', ['AdminController', 'guides'], ['AuthMiddleware', 'AdminMiddleware']);

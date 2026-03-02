@@ -24,7 +24,7 @@ $old    = $old ?? $u;
                 </div>
                 <?php endif; ?>
 
-                <form method="POST" action="<?= $isEdit ? url('admin/utilisateur/' . $u['id'] . '/update') : url('admin/utilisateur/creer') ?>">
+                <form method="POST" action="<?= $isEdit ? url('admin/utilisateur/' . $u['id'] . '/modifier') : url('admin/utilisateur/nouveau') ?>">
                     <?= csrfField() ?>
 
                     <div class="row g-3">

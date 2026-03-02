@@ -555,16 +555,52 @@ class DeclarationController extends BaseController
         $user        = currentUser();
         $declaration = $this->getDeclarationForAgent((int) $id, $user);
 
-        if (!$declaration || $declaration['statut'] !== 'rejetee') {
-            redirectWith('agent/declarations', 'error', 'Cette déclaration ne peut pas être modifiée.');
+        if (!$declaration) {
+            redirectWith('agent/declarations', 'error', 'Déclaration introuvable.');
         }
 
-        // Remettre en brouillon pour correction
-        $this->db->execute(
-            "UPDATE declarations SET statut = 'corrigee', etape_courante = 1, updated_at = NOW() WHERE id = $1",
-            [(int) $id]
-        );
+        $statut = $declaration['statut'];
 
+        // Déclarations validées : non modifiables
+        if ($statut === 'validee') {
+            redirectWith('agent/declarations', 'error', 'Une déclaration validée ne peut pas être modifiée.');
+        }
+
+        // Déclarations soumises : remettre en brouillon avant de modifier
+        if ($statut === 'soumise') {
+            $this->db->beginTransaction();
+            try {
+                $this->db->execute(
+                    "UPDATE declarations SET statut = 'brouillon', updated_at = NOW() WHERE id = $1",
+                    [(int) $id]
+                );
+                $this->db->execute(
+                    "INSERT INTO historique_declarations
+                     (declaration_id, utilisateur_id, action, ancien_statut, nouveau_statut, commentaire, ip_address)
+                     VALUES (\$1, \$2, 'retour_brouillon_agent', 'soumise', 'brouillon', 'Retour en brouillon par l\\'agent pour modification', \$3)",
+                    [(int) $id, $user['id'], getClientIp()]
+                );
+                $this->db->commit();
+                logActivity('declaration_retour_brouillon_agent', 'declarations', (int) $id);
+            } catch (\Exception $e) {
+                $this->db->rollback();
+                error_log('Erreur retour brouillon agent: ' . $e->getMessage());
+                redirectWith('agent/declarations', 'error', 'Erreur lors du retour en brouillon.');
+            }
+            redirect("agent/declaration/$id/saisie");
+        }
+
+        // Déclarations rejetées → statut corrigée pour distinction
+        if ($statut === 'rejetee') {
+            $this->db->execute(
+                "UPDATE declarations SET statut = 'corrigee', etape_courante = 1, updated_at = NOW() WHERE id = $1",
+                [(int) $id]
+            );
+            logActivity('declaration_correction_started', 'declarations', (int) $id);
+            redirect("agent/declaration/$id/saisie");
+        }
+
+        // Brouillon ou corrigée : aller directement en saisie
         redirect("agent/declaration/$id/saisie");
     }
 

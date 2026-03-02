@@ -26,9 +26,14 @@
             <i class="bi bi-x-circle me-1"></i>Rejeter
         </button>
         <?php endif; ?>
-        <a href="<?= url('admin/declaration/' . $declaration['id'] . '/export-pdf') ?>"
+        <?php if (in_array($declaration['statut'], ['soumise', 'rejetee', 'corrigee'])): ?>
+        <button class="btn btn-outline-warning btn-retour-brouillon" data-id="<?= $declaration['id'] ?>" title="Remettre en brouillon pour modification par l'agent">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Retour brouillon
+        </button>
+        <?php endif; ?>
+        <a href="<?= url('admin/declaration/' . $declaration['id'] . '/exporter') ?>"
            class="btn btn-outline-secondary">
-            <i class="bi bi-file-earmark-arrow-down me-1"></i>Exporter HTML
+            <i class="bi bi-file-earmark-arrow-down me-1"></i>Exporter
         </a>
         <a href="<?= url('admin/declarations') ?>" class="btn btn-outline-dark">
             <i class="bi bi-arrow-left me-1"></i>Retour
@@ -317,11 +322,46 @@
     </div>
 </div>
 
+<!-- Modal Retour Brouillon -->
+<div class="modal fade" id="modalRetourBrouillon" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2"></i>Retour en brouillon</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="<?= url('admin/declaration/' . $declaration['id'] . '/retour-brouillon') ?>">
+                <?= csrfField() ?>
+                <div class="modal-body">
+                    <div class="alert alert-warning py-2 mb-3">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        L'agent pourra à nouveau modifier et re-soumettre cette déclaration.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Motif / Commentaire</label>
+                        <textarea name="motif_retour" class="form-control" rows="3"
+                                  placeholder="Précisez la raison du retour en brouillon (optionnel)…"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Confirmer le retour
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 document.querySelector('.btn-valider-detail')?.addEventListener('click', function () {
     new bootstrap.Modal(document.getElementById('modalValider')).show();
 });
 document.querySelector('.btn-rejeter-detail')?.addEventListener('click', function () {
     new bootstrap.Modal(document.getElementById('modalRejeter')).show();
+});
+document.querySelector('.btn-retour-brouillon')?.addEventListener('click', function () {
+    new bootstrap.Modal(document.getElementById('modalRetourBrouillon')).show();
 });
 </script>

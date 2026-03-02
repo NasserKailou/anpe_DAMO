@@ -96,8 +96,14 @@
                                         data-id="<?= $d['id'] ?>" title="Soumettre">
                                     <i class="bi bi-send"></i>
                                 </button>
+                                <?php elseif ($d['statut'] === 'soumise'): ?>
+                                <a href="<?= url('agent/declaration/' . $d['id'] . '/modifier') ?>"
+                                   class="btn btn-outline-warning" title="Rappeler et modifier"
+                                   onclick="return confirm('Rappeler cette déclaration pour la modifier ? Elle sera remise en brouillon et devra être re-soumise.')">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                </a>
                                 <?php elseif ($d['statut'] === 'rejetee'): ?>
-                                <a href="<?= url('agent/declaration/' . $d['id'] . '/saisie') ?>"
+                                <a href="<?= url('agent/declaration/' . $d['id'] . '/modifier') ?>"
                                    class="btn btn-outline-primary" title="Corriger"><i class="bi bi-pencil-square"></i></a>
                                 <?php endif; ?>
                             </div>

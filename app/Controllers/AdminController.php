@@ -1514,4 +1514,110 @@ HTML;
             redirectWith('admin/branches', 'success', "Branche \"$libelle\" créée.");
         }
     }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CAMPAGNES — CLÔTURER / ROUVRIR
+    ═══════════════════════════════════════════════════════════════ */
+
+    /**
+     * Clôturer une campagne active
+     * Route : POST /admin/campagne/:id/cloturer
+     */
+    public function cloturerCampagne(string $id): void
+    {
+        $this->requireCsrf();
+        $campagne = $this->db->fetchOne("SELECT * FROM campagnes_damo WHERE id = $1", [(int)$id]);
+        if (!$campagne) {
+            redirectWith('admin/campagnes', 'error', 'Campagne introuvable.');
+        }
+        if (!$campagne['actif']) {
+            redirectWith('admin/campagnes', 'warning', 'Cette campagne est déjà clôturée.');
+        }
+
+        $this->db->execute(
+            "UPDATE campagnes_damo SET actif = FALSE, updated_at = NOW() WHERE id = $1",
+            [(int)$id]
+        );
+        logActivity('campaign_closed', 'campagnes', (int)$id, ['libelle' => $campagne['libelle']]);
+        redirectWith('admin/campagnes', 'success', "Campagne \"{$campagne['libelle']}\" clôturée. Les agents ne peuvent plus créer de nouvelles déclarations.");
+    }
+
+    /**
+     * Rouvrir une campagne clôturée
+     * Route : POST /admin/campagne/:id/ouvrir
+     */
+    public function ouvrirCampagne(string $id): void
+    {
+        $this->requireCsrf();
+        $campagne = $this->db->fetchOne("SELECT * FROM campagnes_damo WHERE id = $1", [(int)$id]);
+        if (!$campagne) {
+            redirectWith('admin/campagnes', 'error', 'Campagne introuvable.');
+        }
+        if ($campagne['actif']) {
+            redirectWith('admin/campagnes', 'warning', 'Cette campagne est déjà active.');
+        }
+
+        // Clôturer toutes les autres campagnes actives avant de rouvrir celle-ci
+        $this->db->execute("UPDATE campagnes_damo SET actif = FALSE WHERE id != $1", [(int)$id]);
+        $this->db->execute(
+            "UPDATE campagnes_damo SET actif = TRUE, updated_at = NOW() WHERE id = $1",
+            [(int)$id]
+        );
+        logActivity('campaign_reopened', 'campagnes', (int)$id, ['libelle' => $campagne['libelle']]);
+        redirectWith('admin/campagnes', 'success', "Campagne \"{$campagne['libelle']}\" réouverte et définie comme active.");
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       DÉCLARATIONS — RETOUR EN BROUILLON (admin)
+    ═══════════════════════════════════════════════════════════════ */
+
+    /**
+     * Remettre une déclaration soumise/rejetée en brouillon pour modification
+     * Route : POST /admin/declaration/:id/retour-brouillon
+     */
+    public function retourBrouillon(string $id): void
+    {
+        $this->requireCsrf();
+        $declaration = $this->db->fetchOne("SELECT * FROM declarations WHERE id = $1", [(int)$id]);
+
+        if (!$declaration) {
+            redirectWith('admin/declarations', 'error', 'Déclaration introuvable.');
+        }
+
+        $statutActuel = $declaration['statut'];
+        if ($statutActuel === 'brouillon') {
+            redirectWith("admin/declaration/$id", 'warning', 'La déclaration est déjà en brouillon.');
+        }
+        if ($statutActuel === 'validee') {
+            redirectWith("admin/declaration/$id", 'error', 'Impossible de rouvrir une déclaration validée.');
+        }
+
+        $motif = sanitize(post('motif_retour', ''));
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->execute(
+                "UPDATE declarations SET statut = 'brouillon', updated_at = NOW() WHERE id = $1",
+                [(int)$id]
+            );
+            $this->db->execute(
+                "INSERT INTO historique_declarations
+                 (declaration_id, utilisateur_id, action, ancien_statut, nouveau_statut, commentaire, ip_address)
+                 VALUES ($1, $2, 'retour_brouillon', $3, 'brouillon', $4, $5)",
+                [(int)$id, currentUser()['id'], $statutActuel, $motif ?: 'Retour en brouillon par l\'administration', getClientIp()]
+            );
+            $this->db->commit();
+
+            logActivity('declaration_retour_brouillon', 'declarations', (int)$id, [
+                'ancien_statut' => $statutActuel,
+                'motif' => $motif,
+            ]);
+            redirectWith("admin/declaration/$id", 'success', 'Déclaration remise en brouillon. L\'agent peut la modifier.');
+
+        } catch (\Exception $e) {
+            $this->db->rollback();
+            error_log('Erreur retour brouillon: ' . $e->getMessage());
+            redirectWith("admin/declaration/$id", 'error', 'Erreur lors du retour en brouillon.');
+        }
+    }
 }
