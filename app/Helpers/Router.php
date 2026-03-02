@@ -71,12 +71,23 @@ class Router
         }
 
         // Obtenir l'URI sans query string et sans le préfixe du sous-dossier
-        // Ex : /anpe_DAMO/admin/declarations → /admin/declarations
+        // Cas 1 : /anpe_DAMO/profil           → /profil
+        // Cas 2 : /anpe_DAMO/public/profil    → /profil  (après redirection interne Apache)
         $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+
         $basePath = defined('BASE_PATH') ? BASE_PATH : '';
+
+        // Supprimer le préfixe BASE_PATH (ex: /anpe_DAMO)
         if ($basePath !== '' && str_starts_with($uri, $basePath)) {
             $uri = substr($uri, strlen($basePath));
         }
+
+        // Supprimer le segment /public/ résiduel qu'Apache peut injecter
+        // quand le .htaccess racine redirige en interne vers public/
+        if (str_starts_with($uri, '/public/') || $uri === '/public') {
+            $uri = substr($uri, strlen('/public'));
+        }
+
         $uri = '/' . ltrim($uri, '/');
         if ($uri === '') $uri = '/';
 

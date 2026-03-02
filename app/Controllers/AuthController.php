@@ -134,7 +134,9 @@ class AuthController extends BaseController
         unset($_SESSION['intended_url']);
 
         if ($intended && strpos($intended, '/login') === false) {
-            header('Location: ' . APP_URL . $intended);
+            // $intended est déjà une URL complète avec BASE_PATH (ex: /anpe_DAMO/profil)
+            // On la passe directement sans ajouter APP_URL pour éviter les doublons
+            header('Location: ' . $intended);
             exit;
         }
 

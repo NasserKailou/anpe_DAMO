@@ -1,12 +1,26 @@
 # ============================================================
 # e-DAMO — .htaccess RACINE DU PROJET
-# Ce fichier redirige toutes les requêtes vers public/
+#
+# Ce fichier redirige toutes les requêtes vers public/index.php
+# en PRÉSERVANT le REQUEST_URI original (flag PT).
+#
+# Ainsi http://localhost/anpe_DAMO/profil :
+#   → REQUEST_URI reste  /anpe_DAMO/profil  (non modifié)
+#   → Le fichier servi   anpe_DAMO/public/index.php
 # ============================================================
 
-# Activer le moteur de réécriture
+Options -Indexes
+
 RewriteEngine On
 
-# Rediriger toutes les requêtes vers le dossier public/
-# (sauf si on est déjà dans public/)
-RewriteCond %{REQUEST_URI} !^/[^/]+/public/
-RewriteRule ^(.*)$ public/$1 [L]
+# Ne pas réécrire si on est déjà dans public/
+RewriteCond %{REQUEST_URI} ^/[^/]+/public/ [NC]
+RewriteRule ^ - [L]
+
+# Ne pas réécrire les fichiers statiques qui existent réellement dans public/
+RewriteCond %{DOCUMENT_ROOT}/%{REQUEST_URI} -f
+RewriteRule ^ - [L]
+
+# Tout le reste → public/index.php  (PT = garde le REQUEST_URI d'origine)
+RewriteRule ^([^/]+)/(.*)$ $1/public/index.php [QSA,L]
+RewriteRule ^([^/]+)/?$ $1/public/index.php [QSA,L]
