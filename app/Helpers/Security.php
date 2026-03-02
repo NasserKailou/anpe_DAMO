@@ -4,8 +4,6 @@
  */
 namespace App\Helpers;
 
-if (!defined('EDAMO')) die('Accès direct interdit');
-
 class Security
 {
     /**

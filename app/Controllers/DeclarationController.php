@@ -457,6 +457,33 @@ class DeclarationController extends BaseController
             $this->db->commit();
             logActivity('declaration_soumise', 'declarations', (int) $id);
 
+            // ── Notifications email ──
+            try {
+                $notif   = new \App\Helpers\NotificationService();
+                $decFull = $this->db->fetchOne(
+                    "SELECT d.*, e.raison_sociale, r.nom AS region_nom, c.libelle AS campagne_libelle, c.annee,
+                            u.nom AS agent_nom, u.prenom AS agent_prenom, u.email AS agent_email
+                     FROM declarations d
+                     JOIN entreprises e ON e.id = d.entreprise_id
+                     JOIN regions r ON r.id = d.region_id
+                     JOIN campagnes_damo c ON c.id = d.campagne_id
+                     JOIN utilisateurs u ON u.id = d.agent_id
+                     WHERE d.id = $1",
+                    [(int) $id]
+                );
+                if ($decFull) {
+                    $agentInfo = ['nom' => $decFull['agent_nom'], 'prenom' => $decFull['agent_prenom'], 'email' => $decFull['agent_email']];
+                    $notif->declarationSoumise($decFull, $agentInfo);
+                    // Notifier les admins
+                    $admins = $this->db->fetchAll(
+                        "SELECT email, nom, prenom FROM utilisateurs WHERE role IN ('admin','super_admin') AND actif = TRUE"
+                    );
+                    $notif->notifierAdminsNouvelleDeclaration($admins, $decFull);
+                }
+            } catch (\Exception $e) {
+                error_log('[Notif] Erreur soumission: ' . $e->getMessage());
+            }
+
             if (isAjax()) {
                 $this->json(['success' => true, 'message' => 'Déclaration soumise avec succès!', 'redirect' => "/agent/declaration/$id/apercu"]);
             }

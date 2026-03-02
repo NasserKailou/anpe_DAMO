@@ -97,6 +97,16 @@ Router::get('/admin/declaration/:id/exporter', ['AdminController', 'exporterDecl
 // Exports
 Router::get('/admin/export/declarations', ['AdminController', 'exportDeclarations'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::get('/admin/export/entreprises', ['AdminController', 'exportEntreprises'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::get('/admin/declaration/:id/pdf', ['AdminController', 'exportPdf'], ['AuthMiddleware', 'AdminMiddleware']);
+
+// Import entreprises CSV
+Router::get('/admin/import/entreprises', ['AdminController', 'importEntreprisesForm'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/import/entreprises', ['AdminController', 'importEntreprises'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::get('/agent/import/entreprises', ['AgentController', 'importEntreprisesForm'], ['AuthMiddleware', 'AgentMiddleware']);
+Router::post('/agent/import/entreprises', ['AgentController', 'importEntreprises'], ['AuthMiddleware', 'AgentMiddleware']);
+
+// Rappels campagne (cron-like via URL sécurisée)
+Router::get('/admin/campagne/:id/rappels', ['AdminController', 'envoyerRappels'], ['AuthMiddleware', 'AdminMiddleware']);
 
 // Statistiques admin
 Router::get('/admin/statistiques', ['AdminController', 'statistiques'], ['AuthMiddleware', 'AdminMiddleware']);

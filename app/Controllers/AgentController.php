@@ -287,4 +287,101 @@ class AgentController extends BaseController
         logActivity('enterprise_updated', 'entreprises', (int) $id);
         redirectWith('agent/entreprises', 'success', 'Entreprise mise à jour.');
     }
+
+    /**
+     * Formulaire d'import CSV des entreprises (agent)
+     */
+    public function importEntreprisesForm(): void
+    {
+        $user = currentUser();
+        $this->render('agent.import_entreprises', [
+            'pageTitle'  => 'Import CSV Entreprises - ' . APP_NAME,
+            'region_id'  => $user['region_id'],
+            'breadcrumbs' => [
+                ['label' => 'Entreprises', 'url' => '/agent/entreprises'],
+                ['label' => 'Import CSV', 'url' => false],
+            ],
+        ]);
+    }
+
+    /**
+     * Traitement de l'import CSV entreprises (agent)
+     */
+    public function importEntreprises(): void
+    {
+        $this->requireCsrf();
+        $user = currentUser();
+
+        if (empty($_FILES['csv_file']['tmp_name'])) {
+            redirectWith('agent/import/entreprises', 'error', 'Veuillez sélectionner un fichier CSV.');
+        }
+
+        $delimiter = post('delimiter', ';');
+        $skipFirst = post('skip_header', '1') === '1';
+        $regionId  = $user['region_id'];
+
+        $tmpFile = $_FILES['csv_file']['tmp_name'];
+        $handle  = fopen($tmpFile, 'r');
+        if (!$handle) {
+            redirectWith('agent/import/entreprises', 'error', 'Impossible de lire le fichier.');
+        }
+
+        $imported = 0; $errors = 0; $skipped = 0;
+        $lineNum  = 0;
+
+        while (($row = fgetcsv($handle, 1000, $delimiter)) !== false) {
+            $lineNum++;
+            if ($lineNum === 1 && $skipFirst) continue;
+
+            if (count($row) < 2) { $errors++; continue; }
+
+            $raisonSociale = sanitize(trim($row[0] ?? ''));
+            $numeroCnss    = sanitize(trim($row[1] ?? ''));
+            $telephone     = sanitize(trim($row[2] ?? ''));
+            $email         = strtolower(trim($row[3] ?? ''));
+            $activite      = sanitize(trim($row[4] ?? ''));
+            $nationalite   = sanitize(trim($row[5] ?? 'Nigérienne'));
+            $localite      = sanitize(trim($row[6] ?? ''));
+
+            if (!$raisonSociale) { $errors++; continue; }
+
+            if ($numeroCnss) {
+                $exists = $this->db->fetchScalar("SELECT id FROM entreprises WHERE numero_cnss = $1", [$numeroCnss]);
+                if ($exists) { $skipped++; continue; }
+            }
+
+            try {
+                $this->db->insert(
+                    "INSERT INTO entreprises (raison_sociale, numero_cnss, telephone, email,
+                     activite_principale, nationalite, localite, region_id, actif, created_by)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)",
+                    [
+                        $raisonSociale,
+                        $numeroCnss ?: null,
+                        $telephone ?: null,
+                        ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) ? $email : null,
+                        $activite ?: null,
+                        $nationalite,
+                        $localite ?: null,
+                        $regionId,
+                        $user['id'],
+                    ]
+                );
+                $imported++;
+            } catch (\Exception $e) {
+                $errors++;
+            }
+        }
+        fclose($handle);
+
+        logActivity('csv_import_entreprises', 'entreprises', 0, [
+            'imported' => $imported, 'errors' => $errors, 'skipped' => $skipped,
+        ]);
+
+        $msg = "Import terminé : <strong>$imported entreprise(s) importée(s)</strong>";
+        if ($skipped) $msg .= ", $skipped ignorée(s) (doublon CNSS)";
+        if ($errors)  $msg .= ", $errors erreur(s)";
+
+        redirectWith('agent/entreprises', 'success', $msg);
+    }
 }

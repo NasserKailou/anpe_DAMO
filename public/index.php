@@ -38,5 +38,54 @@ if (!isset($_SESSION['_created'])) {
 require_once dirname(__DIR__) . '/app/Helpers/Autoloader.php';
 Autoloader::register();
 
+// ── Sécurité : En-têtes HTTP ──
+if (!headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: SAMEORIGIN');
+    header('X-XSS-Protection: 1; mode=block');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+    if (APP_ENV === 'production') {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+    }
+    // CSP - autoriser Bootstrap CDN + notre domaine
+    $csp = implode('; ', [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
+        "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com data:",
+        "img-src 'self' data: blob:",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+    ]);
+    header("Content-Security-Policy: $csp");
+}
+
+// ── Rate limiting basique (anti-brute-force) ──
+$requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+if (in_array($requestPath, ['/login', '/mot-de-passe-oublie'])
+    && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $rateLimitKey = 'rl_' . md5(($_SERVER['REMOTE_ADDR'] ?? '') . $requestPath);
+    $now          = time();
+    $windowSec    = 300;   // 5 minutes
+    $maxRequests  = 10;    // 10 tentatives max
+
+    if (!isset($_SESSION[$rateLimitKey])) {
+        $_SESSION[$rateLimitKey] = ['count' => 0, 'start' => $now];
+    }
+    $rl = &$_SESSION[$rateLimitKey];
+    if ($now - $rl['start'] > $windowSec) {
+        $rl = ['count' => 0, 'start' => $now];
+    }
+    $rl['count']++;
+    if ($rl['count'] > $maxRequests) {
+        http_response_code(429);
+        header('Retry-After: ' . ($windowSec - ($now - $rl['start'])));
+        die(json_encode(['error' => 'Trop de tentatives. Veuillez patienter.']));
+    }
+}
+
 // Charger le routeur et dispatcher
 require_once dirname(__DIR__) . '/routes/web.php';

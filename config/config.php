@@ -148,3 +148,13 @@ if (APP_DEBUG) {
     ini_set('log_errors', '1');
     ini_set('error_log', LOG_PATH . '/php_errors.log');
 }
+
+// ─── Configuration Email ──────────────────────────────────────────────────────
+define('MAIL_HOST',      getenv('MAIL_HOST')      ?: 'smtp.gmail.com');
+define('MAIL_PORT',      (int)(getenv('MAIL_PORT') ?: 587));
+define('MAIL_USERNAME',  getenv('MAIL_USERNAME')   ?: '');
+define('MAIL_PASSWORD',  getenv('MAIL_PASSWORD')   ?: '');
+define('MAIL_FROM',      getenv('MAIL_FROM')       ?: 'noreply@anpe-niger.ne');
+define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME')  ?: 'e-DAMO ANPE Niger');
+define('MAIL_ENCRYPTION','tls');   // tls ou ssl
+define('MAIL_ENABLED',   !empty(getenv('MAIL_PASSWORD')));

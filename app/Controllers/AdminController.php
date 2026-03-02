@@ -274,6 +274,22 @@ class AdminController extends BaseController
             $this->db->commit();
             logActivity('declaration_validee', 'declarations', (int) $id);
 
+            // ── Notification email agent ──
+            try {
+                $notif = new \App\Helpers\NotificationService();
+                $agent = $this->db->fetchOne(
+                    "SELECT u.nom, u.prenom, u.email
+                     FROM declarations d JOIN utilisateurs u ON u.id = d.agent_id
+                     WHERE d.id = $1",
+                    [(int) $id]
+                );
+                if ($agent) {
+                    $notif->declarationValidee($declaration, $agent, $observations);
+                }
+            } catch (\Exception $e) {
+                error_log('[Notif] Erreur validation: ' . $e->getMessage());
+            }
+
             if (isAjax()) {
                 $this->json(['success' => true, 'message' => 'Déclaration validée avec succès.']);
             }
@@ -323,6 +339,22 @@ class AdminController extends BaseController
             $this->db->commit();
             logActivity('declaration_rejetee', 'declarations', (int) $id, ['motif' => $motif]);
 
+            // ── Notification email agent ──
+            try {
+                $notif = new \App\Helpers\NotificationService();
+                $agent = $this->db->fetchOne(
+                    "SELECT u.nom, u.prenom, u.email
+                     FROM declarations d JOIN utilisateurs u ON u.id = d.agent_id
+                     WHERE d.id = $1",
+                    [(int) $id]
+                );
+                if ($agent) {
+                    $notif->declarationRejetee($declaration, $agent, $motif);
+                }
+            } catch (\Exception $e) {
+                error_log('[Notif] Erreur rejet: ' . $e->getMessage());
+            }
+
             if (isAjax()) {
                 $this->json(['success' => true, 'message' => 'Déclaration rejetée.']);
             }
@@ -344,41 +376,41 @@ class AdminController extends BaseController
 
         $where  = ['1=1'];
         $params = [];
-        $i = 1;
 
         if ($search) {
-            $where[] = "(u.nom ILIKE \$$i OR u.prenom ILIKE \$$i OR u.email ILIKE \$$i)";
+            // Chaque ILIKE a son propre ? (fetchAllRaw nécessite des ? purs)
+            $where[] = "(u.nom ILIKE ? OR u.prenom ILIKE ? OR u.email ILIKE ?)";
             $params[] = "%$search%";
-            $i++;
+            $params[] = "%$search%";
+            $params[] = "%$search%";
         }
         if ($role) {
-            $where[] = "u.role = \$$i";
+            $where[] = "u.role = ?";
             $params[] = $role;
-            $i++;
         }
         if ($region) {
-            $where[] = "u.region_id = \$$i";
+            $where[] = "u.region_id = ?";
             $params[] = (int) $region;
-            $i++;
         }
 
         $whereClause = implode(' AND ', $where);
-        $total = (int) $this->db->fetchScalar(
+        $total = (int) $this->db->fetchScalarRaw(
             "SELECT COUNT(*) FROM utilisateurs u WHERE $whereClause",
             $params
         );
 
         $pagination = $this->paginate($total);
+        $paramsPage = array_merge($params, [$pagination['per_page'], $pagination['offset']]);
 
-        $utilisateurs = $this->db->fetchAll(
+        $utilisateurs = $this->db->fetchAllRaw(
             "SELECT u.*, r.nom AS region_nom,
                     (SELECT COUNT(*) FROM declarations WHERE agent_id = u.id) AS nb_declarations
              FROM utilisateurs u
              LEFT JOIN regions r ON r.id = u.region_id
              WHERE $whereClause
              ORDER BY u.created_at DESC
-             LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}",
-            $params
+             LIMIT ? OFFSET ?",
+            $paramsPage
         );
 
         $regions = $this->db->fetchAll("SELECT id, nom FROM regions ORDER BY nom");
@@ -468,6 +500,22 @@ class AdminController extends BaseController
              $hash, $data['role'], $data['region_id'], $_SESSION['user_id']]
         );
 
+        // ── Notification de bienvenue ──
+        try {
+            $notif    = new \App\Helpers\NotificationService();
+            $regionNom = '';
+            if ($data['region_id']) {
+                $reg = $this->db->fetchOne("SELECT nom FROM regions WHERE id = $1", [(int)$data['region_id']]);
+                $regionNom = $reg['nom'] ?? '';
+            }
+            $notif->welcomeAgent(
+                array_merge($data, ['region_nom' => $regionNom]),
+                $data['password']
+            );
+        } catch (\Exception $e) {
+            error_log('[Notif] Erreur welcome: ' . $e->getMessage());
+        }
+
         logActivity('user_created', 'utilisateurs', 0, ['email' => $data['email']]);
         redirectWith('admin/utilisateurs', 'success', 'Utilisateur créé avec succès.');
     }
@@ -556,9 +604,11 @@ class AdminController extends BaseController
      */
     public function statistiques(): void
     {
-        $campagne = $this->db->fetchOne(
-            "SELECT * FROM campagnes_damo WHERE actif = TRUE ORDER BY annee DESC LIMIT 1"
-        );
+        $annee    = (int) get('annee', 0);
+        $campagne = $annee
+            ? $this->db->fetchOne("SELECT * FROM campagnes_damo WHERE annee = $1", [$annee])
+            : $this->db->fetchOne("SELECT * FROM campagnes_damo WHERE actif = TRUE ORDER BY annee DESC LIMIT 1");
+
         $campagneId = $campagne['id'] ?? 0;
 
         // Effectifs par catégorie (total global)
@@ -569,14 +619,15 @@ class AdminController extends BaseController
                     SUM(nigeriens_f + africains_f + autres_nat_f) AS femmes
              FROM declaration_categories_effectifs dc
              JOIN declarations d ON d.id = dc.declaration_id
-             WHERE d.campagne_id = $1 AND d.statut = 'validee'
-             GROUP BY categorie",
+             WHERE d.campagne_id = \$1 AND d.statut = 'validee'
+             GROUP BY categorie
+             ORDER BY total DESC",
             [$campagneId]
         );
 
         // Déclarations par statut
         $parStatut = $this->db->fetchAll(
-            "SELECT statut, COUNT(*) AS total FROM declarations WHERE campagne_id = $1 GROUP BY statut",
+            "SELECT statut, COUNT(*) AS total FROM declarations WHERE campagne_id = \$1 GROUP BY statut",
             [$campagneId]
         );
 
@@ -584,12 +635,26 @@ class AdminController extends BaseController
         $effectifsParRegion = $this->db->fetchAll(
             "SELECT r.nom AS region,
                     COUNT(DISTINCT d.id) AS nb_declarations,
-                    SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois
+                    COALESCE(SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f), 0) AS total_emplois
              FROM regions r
-             LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = $1 AND d.statut = 'validee'
+             LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = \$1 AND d.statut = 'validee'
              LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
              GROUP BY r.id, r.nom
              ORDER BY r.nom",
+            [$campagneId]
+        );
+
+        // Top entreprises par effectifs
+        $topEntreprises = $this->db->fetchAll(
+            "SELECT e.raison_sociale, r.nom AS region,
+                    COALESCE(SUM(dc.nigeriens_h+dc.nigeriens_f+dc.africains_h+dc.africains_f+dc.autres_nat_h+dc.autres_nat_f), 0) AS emplois
+             FROM declarations d
+             JOIN entreprises e ON e.id = d.entreprise_id
+             JOIN regions r ON r.id = d.region_id
+             LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
+             WHERE d.campagne_id = \$1 AND d.statut = 'validee'
+             GROUP BY e.id, e.raison_sociale, r.nom
+             ORDER BY emplois DESC LIMIT 10",
             [$campagneId]
         );
 
@@ -599,6 +664,7 @@ class AdminController extends BaseController
             'effectifsParCategorie' => $effectifsParCategorie,
             'parStatut'             => $parStatut,
             'effectifsParRegion'    => $effectifsParRegion,
+            'topEntreprises'        => $topEntreprises,
             'breadcrumbs'           => [
                 ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
                 ['label' => 'Statistiques', 'url' => false],
@@ -818,45 +884,43 @@ class AdminController extends BaseController
 
         $where  = ['1=1'];
         $params = [];
-        $i = 1;
 
         if ($search) {
-            $where[] = "(u.email ILIKE \$$i OR u.nom ILIKE \$$i OR l.action ILIKE \$$i)";
+            $where[] = "(u.email ILIKE ? OR u.nom ILIKE ? OR l.action ILIKE ?)";
             $params[] = "%$search%";
-            $i++;
+            $params[] = "%$search%";
+            $params[] = "%$search%";
         }
         if ($action) {
-            $where[] = "l.action = \$$i";
+            $where[] = "l.action = ?";
             $params[] = $action;
-            $i++;
         }
         if ($dateFrom) {
-            $where[] = "l.created_at >= \$$i";
+            $where[] = "l.created_at >= ?";
             $params[] = $dateFrom . ' 00:00:00';
-            $i++;
         }
         if ($dateTo) {
-            $where[] = "l.created_at <= \$$i";
+            $where[] = "l.created_at <= ?";
             $params[] = $dateTo . ' 23:59:59';
-            $i++;
         }
 
         $whereClause = implode(' AND ', $where);
-        $total = (int) $this->db->fetchScalar(
+        $total = (int) $this->db->fetchScalarRaw(
             "SELECT COUNT(*) FROM logs_activite l LEFT JOIN utilisateurs u ON u.id = l.utilisateur_id WHERE $whereClause",
             $params
         );
 
         $pagination = $this->paginate($total, 30);
+        $paramsPage = array_merge($params, [$pagination['per_page'], $pagination['offset']]);
 
-        $logs = $this->db->fetchAll(
+        $logs = $this->db->fetchAllRaw(
             "SELECT l.*, u.nom, u.prenom, u.email
              FROM logs_activite l
              LEFT JOIN utilisateurs u ON u.id = l.utilisateur_id
              WHERE $whereClause
              ORDER BY l.created_at DESC
-             LIMIT {$pagination['per_page']} OFFSET {$pagination['offset']}",
-            $params
+             LIMIT ? OFFSET ?",
+            $paramsPage
         );
 
         $this->render('admin.logs', [
@@ -878,17 +942,16 @@ class AdminController extends BaseController
 
         $where  = ['1=1'];
         $params = [];
-        $i = 1;
 
         if ($campagneId) {
-            $where[] = "d.campagne_id = \$$i"; $params[] = $campagneId; $i++;
+            $where[] = "d.campagne_id = ?"; $params[] = $campagneId;
         }
         if ($statut) {
-            $where[] = "d.statut = \$$i"; $params[] = $statut; $i++;
+            $where[] = "d.statut = ?"; $params[] = $statut;
         }
 
         $whereClause = implode(' AND ', $where);
-        $declarations = $this->db->fetchAll(
+        $declarations = $this->db->fetchAllRaw(
             "SELECT d.code_questionnaire, d.statut, d.masse_salariale, d.date_soumission,
                     e.raison_sociale, e.numero_cnss, e.activite_principale,
                     r.nom AS region, c.annee,
@@ -925,5 +988,408 @@ class AdminController extends BaseController
 
         fclose($out);
         exit;
+    }
+
+    /**
+     * Export CSV des entreprises
+     */
+    public function exportEntreprises(): void
+    {
+        $regionId = (int) get('region', 0);
+        $where    = ['1=1'];
+        $params   = [];
+        if ($regionId) {
+            $where[]  = 'd.region_id = ?';
+            $params[] = $regionId;
+        }
+        $whereClause = implode(' AND ', $where);
+
+        $entreprises = $this->db->fetchAllRaw(
+            "SELECT e.raison_sociale, e.numero_cnss, e.telephone, e.email,
+                    e.activite_principale, e.nationalite, e.localite,
+                    r.nom AS region, b.libelle AS branche
+             FROM entreprises e
+             LEFT JOIN regions r ON r.id = e.region_id
+             LEFT JOIN branches_activite b ON b.id = e.branche_id
+             WHERE e.actif = TRUE
+             ORDER BY r.nom, e.raison_sociale",
+            []
+        );
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="entreprises_' . date('Y-m-d') . '.csv"');
+        $out = fopen('php://output', 'w');
+        fputs($out, "\xEF\xBB\xBF");
+        fputcsv($out, ['Raison Sociale', 'N° CNSS', 'Téléphone', 'Email', 'Activité', 'Nationalité', 'Localité', 'Région', 'Branche'], ';');
+        foreach ($entreprises as $e) {
+            fputcsv($out, array_values($e), ';');
+        }
+        fclose($out);
+        exit;
+    }
+
+    /**
+     * Export PDF d'une déclaration (HTML → PDF via wkhtmltopdf ou HTML pur)
+     */
+    public function exportPdf(string $id): void
+    {
+        $declaration = $this->db->fetchOne(
+            "SELECT d.*, e.raison_sociale, e.numero_cnss, e.activite_principale,
+                    e.nationalite, e.localite, e.telephone AS ent_tel, e.email AS ent_email,
+                    e.boite_postale, e.quartier, e.adresse,
+                    r.nom AS region_nom, b.libelle AS branche_nom,
+                    u.nom AS agent_nom, u.prenom AS agent_prenom,
+                    c.annee, c.libelle AS campagne_libelle,
+                    v.nom AS validateur_nom, v.prenom AS validateur_prenom
+             FROM declarations d
+             JOIN entreprises e ON e.id = d.entreprise_id
+             JOIN regions r ON r.id = d.region_id
+             JOIN utilisateurs u ON u.id = d.agent_id
+             JOIN campagnes_damo c ON c.id = d.campagne_id
+             LEFT JOIN branches_activite b ON b.id = e.branche_id
+             LEFT JOIN utilisateurs v ON v.id = d.validateur_id
+             WHERE d.id = $1",
+            [(int) $id]
+        );
+
+        if (!$declaration) {
+            redirectWith('admin/declarations', 'error', 'Déclaration introuvable.');
+        }
+
+        $effectifsMensuels   = $this->db->fetchAll("SELECT * FROM declaration_effectifs_mensuels WHERE declaration_id = $1 ORDER BY mois", [(int)$id]);
+        $categoriesEffectifs = $this->db->fetchAll("SELECT * FROM declaration_categories_effectifs WHERE declaration_id = $1", [(int)$id]);
+        $niveauxInstruction  = $this->db->fetchAll("SELECT * FROM declaration_niveaux_instruction WHERE declaration_id = $1", [(int)$id]);
+        $formations          = $this->db->fetchAll("SELECT * FROM declaration_formations WHERE declaration_id = $1", [(int)$id]);
+        $pertesEmploi        = $this->db->fetchAll("SELECT * FROM declaration_pertes_emploi WHERE declaration_id = $1", [(int)$id]);
+        $perspective         = $this->db->fetchOne("SELECT * FROM declaration_perspectives WHERE declaration_id = $1", [(int)$id]);
+        $effectifsEtrangers  = $this->db->fetchAll("SELECT * FROM declaration_effectifs_etrangers WHERE declaration_id = $1", [(int)$id]);
+
+        // Générer le HTML du PDF
+        $html = $this->generatePdfHtml(
+            $declaration, $effectifsMensuels, $categoriesEffectifs,
+            $niveauxInstruction, $formations, $pertesEmploi,
+            $perspective, $effectifsEtrangers
+        );
+
+        // En-têtes pour le téléchargement HTML (impression navigateur)
+        $filename = 'declaration_' . $declaration['code_questionnaire'] . '_' . date('Ymd') . '.html';
+        $filename = str_replace('/', '-', $filename);
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        echo $html;
+        exit;
+    }
+
+    /**
+     * Générer le HTML du rapport PDF
+     */
+    private function generatePdfHtml(
+        array $d, array $effectifsMensuels, array $categories,
+        array $niveaux, array $formations, array $pertes,
+        ?array $perspective, array $etrangers
+    ): string {
+        $code    = htmlspecialchars($d['code_questionnaire']);
+        $raison  = htmlspecialchars($d['raison_sociale'] ?? '');
+        $cnss    = htmlspecialchars($d['numero_cnss'] ?? '');
+        $region  = htmlspecialchars($d['region_nom'] ?? '');
+        $annee   = htmlspecialchars((string)($d['annee'] ?? ''));
+        $statut  = statutLabel($d['statut'] ?? '');
+        $agent   = htmlspecialchars(($d['agent_prenom'] ?? '') . ' ' . ($d['agent_nom'] ?? ''));
+        $campagne = htmlspecialchars($d['campagne_libelle'] ?? '');
+        $moisLabels = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+        // Tableau effectifs mensuels
+        $rowsMensuels = '';
+        foreach ($effectifsMensuels as $em) {
+            $moisLabel = $moisLabels[($em['mois'] - 1)] ?? $em['mois'];
+            $rowsMensuels .= "<tr><td>$moisLabel</td><td style='text-align:right'>{$em['effectif']}</td></tr>";
+        }
+
+        // Tableau catégories
+        $rowsCats = '';
+        foreach ($categories as $cat) {
+            $total = ($cat['nigeriens_h'] ?? 0) + ($cat['nigeriens_f'] ?? 0)
+                   + ($cat['africains_h'] ?? 0) + ($cat['africains_f'] ?? 0)
+                   + ($cat['autres_nat_h'] ?? 0) + ($cat['autres_nat_f'] ?? 0);
+            $catLabel = CATEGORIES_PROFESSIONNELLES[$cat['categorie']] ?? $cat['categorie'];
+            $rowsCats .= "<tr>
+                <td>" . htmlspecialchars($catLabel) . "</td>
+                <td>{$cat['nigeriens_h']}</td><td>{$cat['nigeriens_f']}</td>
+                <td>{$cat['africains_h']}</td><td>{$cat['africains_f']}</td>
+                <td>{$cat['autres_nat_h']}</td><td>{$cat['autres_nat_f']}</td>
+                <td><strong>$total</strong></td>
+            </tr>";
+        }
+
+        // Section formation
+        $formationHtml = '';
+        if (!empty($formations)) {
+            $f = $formations[0];
+            $ouiNon = $f['a_eu_formation'] ? 'Oui' : 'Non';
+            $formationHtml = "
+            <h3 style='color:#1d4ed8'>5. Formation professionnelle</h3>
+            <table class='data'>
+                <tr><th>A eu une formation</th><td>$ouiNon</td></tr>
+                <tr><th>Qualification</th><td>" . htmlspecialchars($f['qualification'] ?? '') . "</td></tr>
+                <tr><th>Nature formation</th><td>" . htmlspecialchars($f['nature_formation'] ?? '') . "</td></tr>
+                <tr><th>Durée</th><td>" . htmlspecialchars($f['duree_formation'] ?? '') . "</td></tr>
+                <tr><th>Effectif H/F</th><td>{$f['effectif_h']} H / {$f['effectif_f']} F</td></tr>
+            </table>";
+        }
+
+        // Section pertes d'emploi
+        $pertesHtml = '';
+        if (!empty($pertes)) {
+            $rows = '';
+            foreach ($pertes as $p) {
+                $label = MOTIFS_PERTE_EMPLOI[$p['motif']] ?? $p['motif'];
+                $rows .= "<tr><td>" . htmlspecialchars($label) . "</td><td>{$p['effectif_h']}</td><td>{$p['effectif_f']}</td></tr>";
+            }
+            $pertesHtml = "
+            <h3 style='color:#1d4ed8'>6. Pertes d'emploi</h3>
+            <table class='data'>
+                <thead><tr><th>Motif</th><th>Hommes</th><th>Femmes</th></tr></thead>
+                <tbody>$rows</tbody>
+            </table>";
+        }
+
+        $now = date('d/m/Y à H:i');
+        $dateSubmission = formatDate($d['date_soumission'] ?? '');
+        $brancheNom   = htmlspecialchars($d['branche_nom'] ?? '');
+        $nationalite  = htmlspecialchars($d['nationalite'] ?? '');
+        $localite     = htmlspecialchars($d['localite'] ?? '');
+        $masseSalFmt  = number_format((float)($d['masse_salariale'] ?? 0), 2, ',', ' ');
+        $decId        = (int)$d['id'];
+        $statut_class = htmlspecialchars($d['statut'] ?? 'brouillon');
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Déclaration $code — $appName</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 0; padding: 20px; }
+  .header { background: #1d4ed8; color: white; padding: 20px; margin-bottom: 24px; }
+  .header h1 { margin: 0; font-size: 18px; }
+  .header p  { margin: 4px 0 0; font-size: 12px; opacity: .85; }
+  .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; }
+  .badge-validee { background: #d1fae5; color: #065f46; }
+  .badge-soumise { background: #fef3c7; color: #92400e; }
+  .badge-rejetee { background: #fee2e2; color: #7f1d1d; }
+  .badge-brouillon { background: #f3f4f6; color: #374151; }
+  h2 { color: #1e40af; border-bottom: 2px solid #1d4ed8; padding-bottom: 4px; font-size: 14px; margin-top: 24px; }
+  h3 { color: #1d4ed8; font-size: 13px; margin-top: 20px; }
+  table.data { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
+  table.data th, table.data td { border: 1px solid #d1d5db; padding: 6px 8px; }
+  table.data th { background: #eff6ff; font-weight: bold; }
+  table.data tr:nth-child(even) td { background: #f9fafb; }
+  .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+  @media print { .no-print { display: none; } body { padding: 10px; } }
+</style>
+</head>
+<body>
+<div class="no-print" style="background:#1d4ed8;color:white;padding:12px;margin-bottom:16px;border-radius:8px">
+  <strong>Mode impression</strong> : Appuyez sur <kbd>Ctrl+P</kbd> pour imprimer ou enregistrer en PDF.
+  <a href="$appUrl/admin/declaration/$decId" style="float:right;color:white;text-decoration:underline">&larr; Retour</a>
+</div>
+<div class="header">
+  <h1>e-DAMO &mdash; Déclaration de la Main d’&OElig;uvre</h1>
+  <p>ANPE Niger &mdash; Exercice $annee &mdash; Campagne : $campagne</p>
+</div>
+<table class="data" style="margin-bottom:20px">
+  <tr><th style="width:30%">Code questionnaire</th><td><strong>$code</strong></td>
+      <th style="width:30%">Statut</th><td><span class="badge badge-$statut_class">$statut</span></td></tr>
+  <tr><th>Raison sociale</th><td><strong>$raison</strong></td><th>N&deg; CNSS</th><td>$cnss</td></tr>
+  <tr><th>R&eacute;gion</th><td>$region</td><th>Campagne</th><td>$campagne</td></tr>
+  <tr><th>Agent</th><td>$agent</td><th>Date soumission</th><td>$dateSubmission</td></tr>
+</table>
+<h2>1. Identification de l&apos;entreprise</h2>
+<table class="data">
+  <tr><th style="width:30%">Raison sociale</th><td>$raison</td><th style="width:30%">N&deg; CNSS</th><td>$cnss</td></tr>
+  <tr><th>Branche d&apos;activit&eacute;</th><td>$brancheNom</td><th>Nationalit&eacute;</th><td>$nationalite</td></tr>
+  <tr><th>Localit&eacute;</th><td>$localite</td><th>Masse salariale</th><td>$masseSalFmt FCFA</td></tr>
+</table>
+<h2>2. Effectifs mensuels</h2>
+<table class="data">
+  <thead><tr><th>Mois</th><th>Effectif</th></tr></thead>
+  <tbody>$rowsMensuels</tbody>
+</table>
+<h2>3. Effectifs par cat&eacute;gorie</h2>
+<table class="data">
+  <thead>
+    <tr>
+      <th rowspan="2">Cat&eacute;gorie</th>
+      <th colspan="2">Nig&eacute;riens</th>
+      <th colspan="2">Africains</th>
+      <th colspan="2">Autres</th>
+      <th rowspan="2">Total</th>
+    </tr>
+    <tr><th>H</th><th>F</th><th>H</th><th>F</th><th>H</th><th>F</th></tr>
+  </thead>
+  <tbody>$rowsCats</tbody>
+</table>
+$formationHtml
+$pertesHtml
+<div class="footer">
+  <p>Document g&eacute;n&eacute;r&eacute; le $now par $appName &mdash; ANPE Niger</p>
+  <p>D&eacute;claration r&eacute;f&eacute;rence : $code</p>
+</div>
+</body></html>
+HTML;
+    }
+
+    /**
+     * Formulaire d'import CSV des entreprises
+     */
+    public function importEntreprisesForm(): void
+    {
+        $regions = $this->db->fetchAll("SELECT id, nom FROM regions ORDER BY nom");
+        $this->render('admin.import_entreprises', [
+            'pageTitle' => 'Import CSV Entreprises - ' . APP_NAME,
+            'regions'   => $regions,
+        ]);
+    }
+
+    /**
+     * Traitement de l'import CSV des entreprises
+     */
+    public function importEntreprises(): void
+    {
+        $this->requireCsrf();
+
+        if (empty($_FILES['csv_file']['tmp_name'])) {
+            redirectWith('admin/import/entreprises', 'error', 'Veuillez sélectionner un fichier CSV.');
+        }
+
+        $regionId  = (int) post('region_id', 0);
+        $delimiter = post('delimiter', ';');
+        $skipFirst = post('skip_header', '1') === '1';
+
+        if (!$regionId) {
+            redirectWith('admin/import/entreprises', 'error', 'Veuillez sélectionner une région.');
+        }
+
+        $tmpFile = $_FILES['csv_file']['tmp_name'];
+        $handle  = fopen($tmpFile, 'r');
+        if (!$handle) {
+            redirectWith('admin/import/entreprises', 'error', 'Impossible de lire le fichier.');
+        }
+
+        $imported = 0; $errors = 0; $skipped = 0;
+        $lineNum  = 0;
+        $errorLog = [];
+
+        while (($row = fgetcsv($handle, 1000, $delimiter)) !== false) {
+            $lineNum++;
+            if ($lineNum === 1 && $skipFirst) continue; // En-tête
+
+            // Format attendu : raison_sociale, numero_cnss, telephone, email, activite_principale, nationalite, localite
+            if (count($row) < 2) {
+                $errors++;
+                $errorLog[] = "Ligne $lineNum : données insuffisantes";
+                continue;
+            }
+
+            $raisonSociale = sanitize(trim($row[0] ?? ''));
+            $numeroCnss    = sanitize(trim($row[1] ?? ''));
+            $telephone     = sanitize(trim($row[2] ?? ''));
+            $email         = strtolower(trim($row[3] ?? ''));
+            $activite      = sanitize(trim($row[4] ?? ''));
+            $nationalite   = sanitize(trim($row[5] ?? 'Nigérienne'));
+            $localite      = sanitize(trim($row[6] ?? ''));
+
+            if (!$raisonSociale) {
+                $errors++;
+                $errorLog[] = "Ligne $lineNum : raison sociale manquante";
+                continue;
+            }
+
+            // Vérifier si l'entreprise existe déjà (par CNSS)
+            if ($numeroCnss) {
+                $existingId = $this->db->fetchScalar(
+                    "SELECT id FROM entreprises WHERE numero_cnss = $1",
+                    [$numeroCnss]
+                );
+                if ($existingId) {
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            try {
+                $this->db->insert(
+                    "INSERT INTO entreprises (raison_sociale, numero_cnss, telephone, email,
+                     activite_principale, nationalite, localite, region_id, actif, created_by)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)",
+                    [
+                        $raisonSociale,
+                        $numeroCnss ?: null,
+                        $telephone ?: null,
+                        ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) ? $email : null,
+                        $activite ?: null,
+                        $nationalite,
+                        $localite ?: null,
+                        $regionId,
+                        $_SESSION['user_id']
+                    ]
+                );
+                $imported++;
+            } catch (\Exception $e) {
+                $errors++;
+                $errorLog[] = "Ligne $lineNum : " . $e->getMessage();
+            }
+        }
+        fclose($handle);
+
+        logActivity('csv_import_entreprises', 'entreprises', 0, [
+            'imported' => $imported, 'errors' => $errors, 'skipped' => $skipped,
+        ]);
+
+        $msg = "Import terminé : <strong>$imported entreprise(s) importée(s)</strong>";
+        if ($skipped) $msg .= ", $skipped ignorée(s) (doublon CNSS)";
+        if ($errors)  $msg .= ", $errors erreur(s)";
+        if (!empty($errorLog)) {
+            error_log('[CSV Import] ' . implode(' | ', $errorLog));
+        }
+
+        redirectWith('admin/utilisateurs', 'success', $msg);
+    }
+
+    /**
+     * Envoyer des rappels de campagne aux agents avec déclarations en brouillon
+     */
+    public function envoyerRappels(string $id): void
+    {
+        $campagne = $this->db->fetchOne("SELECT * FROM campagnes_damo WHERE id = $1", [(int)$id]);
+        if (!$campagne) {
+            redirectWith('admin/campagnes', 'error', 'Campagne introuvable.');
+        }
+
+        $joursRestants = (int) ceil((strtotime($campagne['date_fin']) - time()) / 86400);
+        if ($joursRestants < 0) {
+            redirectWith('admin/campagnes', 'warning', 'La campagne est déjà clôturée.');
+        }
+
+        // Agents avec des déclarations non soumises
+        $agents = $this->db->fetchAll(
+            "SELECT DISTINCT u.email, u.nom, u.prenom
+             FROM utilisateurs u
+             JOIN declarations d ON d.agent_id = u.id
+             WHERE d.campagne_id = $1 AND d.statut = 'brouillon' AND u.actif = TRUE",
+            [(int)$id]
+        );
+
+        $notif = new \App\Helpers\NotificationService();
+        $sent  = 0;
+        foreach ($agents as $agent) {
+            if ($notif->rappelClotureCampagne($agent, $campagne, $joursRestants)) {
+                $sent++;
+            }
+        }
+
+        logActivity('rappels_envoyes', 'campagnes', (int)$id, ['nb_agents' => $sent, 'jours' => $joursRestants]);
+        redirectWith('admin/campagnes', 'success', "$sent rappel(s) envoyé(s) aux agents.");
     }
 }
