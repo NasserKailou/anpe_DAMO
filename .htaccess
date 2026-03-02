@@ -1,0 +1,12 @@
+# ============================================================
+# e-DAMO — .htaccess RACINE DU PROJET
+# Ce fichier redirige toutes les requêtes vers public/
+# ============================================================
+
+# Activer le moteur de réécriture
+RewriteEngine On
+
+# Rediriger toutes les requêtes vers le dossier public/
+# (sauf si on est déjà dans public/)
+RewriteCond %{REQUEST_URI} !^/[^/]+/public/
+RewriteRule ^(.*)$ public/$1 [L]

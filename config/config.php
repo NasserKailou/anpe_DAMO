@@ -30,10 +30,22 @@ define('APP_ENV',         getenv('APP_ENV') ?: 'production');
 define('APP_DEBUG',       filter_var(getenv('APP_DEBUG') ?: false, FILTER_VALIDATE_BOOLEAN));
 define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
 
-// Sous-dossier de base détecté automatiquement depuis SCRIPT_NAME
-// Ex : /anpe_DAMO/index.php → BASE_PATH = '/anpe_DAMO'
-// Ex : /index.php           → BASE_PATH = ''
-define('BASE_PATH', rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\'));
+// Sous-dossier de base détecté automatiquement depuis SCRIPT_NAME.
+// On enlève aussi le segment "public" si le fichier index.php est servi
+// directement depuis public/ via un VirtualHost (DocumentRoot = …/public).
+//
+// Exemples :
+//   SCRIPT_NAME = /anpe_DAMO/index.php   → BASE_PATH = '/anpe_DAMO'
+//   SCRIPT_NAME = /anpe_DAMO/public/index.php → BASE_PATH = '/anpe_DAMO'
+//   SCRIPT_NAME = /index.php             → BASE_PATH = ''
+(function () {
+    $scriptDir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');
+    // Si le dossier se termine par /public, on le retire pour ne garder que le préfixe
+    if (str_ends_with($scriptDir, '/public') || $scriptDir === '/public') {
+        $scriptDir = rtrim(substr($scriptDir, 0, -7), '/\\');
+    }
+    define('BASE_PATH', $scriptDir);
+})();
 define('APP_KEY',         getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');
 define('APP_TIMEZONE',    'Africa/Niamey');
 define('APP_LOCALE',      'fr_FR');
