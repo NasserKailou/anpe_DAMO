@@ -63,11 +63,17 @@ function isPost(): bool
 }
 
 /**
- * Rediriger vers une URL
+ * Rediriger vers une URL (préfixe BASE_PATH inclus automatiquement)
  */
 function redirect(string $url): never
 {
-    header('Location: ' . APP_URL . '/' . ltrim($url, '/'));
+    $base = defined('BASE_PATH') ? BASE_PATH : '';
+    // Si l'URL est déjà absolue (http://) on la passe telle quelle
+    if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+        header('Location: ' . $url);
+    } else {
+        header('Location: ' . $base . '/' . ltrim($url, '/'));
+    }
     exit;
 }
 

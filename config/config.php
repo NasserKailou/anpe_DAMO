@@ -29,6 +29,11 @@ define('APP_VERSION',     '1.0.0');
 define('APP_ENV',         getenv('APP_ENV') ?: 'production');
 define('APP_DEBUG',       filter_var(getenv('APP_DEBUG') ?: false, FILTER_VALIDATE_BOOLEAN));
 define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
+
+// Sous-dossier de base détecté automatiquement depuis SCRIPT_NAME
+// Ex : /anpe_DAMO/index.php → BASE_PATH = '/anpe_DAMO'
+// Ex : /index.php           → BASE_PATH = ''
+define('BASE_PATH', rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\'));
 define('APP_KEY',         getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');
 define('APP_TIMEZONE',    'Africa/Niamey');
 define('APP_LOCALE',      'fr_FR');
