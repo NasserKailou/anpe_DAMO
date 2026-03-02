@@ -289,6 +289,48 @@ class AgentController extends BaseController
     }
 
     /**
+     * Désactiver (soft-delete) une entreprise
+     * Route : POST /agent/entreprise/:id/supprimer
+     */
+    public function supprimerEntreprise(string $id): void
+    {
+        $this->requireCsrf();
+        $user       = currentUser();
+        $entreprise = $this->db->fetchOne(
+            "SELECT * FROM entreprises WHERE id = $1 AND region_id = $2",
+            [(int) $id, $user['region_id']]
+        );
+
+        if (!$entreprise) {
+            redirectWith('agent/entreprises', 'error', 'Entreprise introuvable.');
+        }
+
+        // Vérifier qu'aucune déclaration n'est attachée
+        $nbDecl = (int) $this->db->fetchScalar(
+            "SELECT COUNT(*) FROM declarations WHERE entreprise_id = $1",
+            [(int) $id]
+        );
+        if ($nbDecl > 0) {
+            redirectWith(
+                'agent/entreprises',
+                'error',
+                "Impossible de supprimer \"{$entreprise['raison_sociale']}\" : elle possède $nbDecl déclaration(s)."
+            );
+        }
+
+        // Soft-delete : mettre actif = FALSE
+        $this->db->execute(
+            "UPDATE entreprises SET actif = FALSE, updated_at = NOW() WHERE id = $1",
+            [(int) $id]
+        );
+
+        logActivity('enterprise_deleted', 'entreprises', (int) $id, [
+            'raison_sociale' => $entreprise['raison_sociale'],
+        ]);
+        redirectWith('agent/entreprises', 'success', "Entreprise \"{$entreprise['raison_sociale']}\" supprimée.");
+    }
+
+    /**
      * Formulaire d'import CSV des entreprises (agent)
      */
     public function importEntreprisesForm(): void

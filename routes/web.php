@@ -53,6 +53,7 @@ Router::get('/agent/entreprise/nouvelle', ['AgentController', 'nouvelleEntrepris
 Router::post('/agent/entreprise/nouvelle', ['AgentController', 'creerEntreprise'], ['AuthMiddleware', 'AgentMiddleware']);
 Router::get('/agent/entreprise/:id/modifier', ['AgentController', 'modifierEntreprise'], ['AuthMiddleware', 'AgentMiddleware']);
 Router::post('/agent/entreprise/:id/modifier', ['AgentController', 'updateEntreprise'], ['AuthMiddleware', 'AgentMiddleware']);
+Router::post('/agent/entreprise/:id/supprimer', ['AgentController', 'supprimerEntreprise'], ['AuthMiddleware', 'AgentMiddleware']);
 
 // Déclarations
 Router::get('/agent/declarations', ['DeclarationController', 'index'], ['AuthMiddleware', 'AgentMiddleware']);

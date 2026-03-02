@@ -2,6 +2,8 @@
 /**
  * Vue liste des entreprises de la région (agent)
  */
+defined('EDAMO') or exit;
+
 $entreprises = $entreprises ?? [];
 $pagination  = $pagination  ?? [];
 $branches    = $branches    ?? [];
@@ -29,7 +31,8 @@ $total       = $total       ?? 0;
             <div class="card-body d-flex align-items-center justify-content-between">
                 <div class="text-muted small">
                     <i class="bi bi-info-circle me-1"></i>
-                    Gérez les entreprises de votre région. Seules les entreprises actives peuvent faire l'objet d'une déclaration DAMO.
+                    Gérez les entreprises de votre région. Seules les entreprises actives
+                    peuvent faire l'objet d'une déclaration DAMO.
                 </div>
                 <div class="d-flex gap-2">
                     <a href="<?= url('agent/entreprise/nouvelle') ?>" class="btn btn-primary btn-sm">
@@ -47,7 +50,7 @@ $total       = $total       ?? 0;
 <!-- Filtres -->
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-2">
-        <form method="GET" class="row g-2 align-items-end">
+        <form method="GET" action="<?= url('agent/entreprises') ?>" class="row g-2 align-items-end">
             <div class="col-md-5">
                 <input type="text" name="q" class="form-control form-control-sm"
                        placeholder="Rechercher raison sociale, N° CNSS…"
@@ -57,7 +60,8 @@ $total       = $total       ?? 0;
                 <select name="branche" class="form-select form-select-sm">
                     <option value="">Toutes les branches</option>
                     <?php foreach ($branches as $b): ?>
-                        <option value="<?= $b['id'] ?>" <?= ($filters['branche']??'') == $b['id'] ? 'selected' : '' ?>>
+                        <option value="<?= $b['id'] ?>"
+                            <?= ($filters['branche'] ?? '') == $b['id'] ? 'selected' : '' ?>>
                             <?= e($b['libelle']) ?>
                         </option>
                     <?php endforeach; ?>
@@ -91,7 +95,7 @@ $total       = $total       ?? 0;
     <div class="card-body p-0">
         <?php if (empty($entreprises)): ?>
             <div class="text-center py-5">
-                <i class="bi bi-building text-muted" style="font-size: 2.5rem"></i>
+                <i class="bi bi-building text-muted" style="font-size:2.5rem"></i>
                 <p class="text-muted mt-2">Aucune entreprise trouvée.</p>
                 <a href="<?= url('agent/entreprise/nouvelle') ?>" class="btn btn-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i>Ajouter une entreprise
@@ -107,7 +111,7 @@ $total       = $total       ?? 0;
                             <th>Branche</th>
                             <th>Localité</th>
                             <th class="text-center">Déclarations</th>
-                            <th class="text-center">Actions</th>
+                            <th class="text-center" style="width:120px">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -116,7 +120,10 @@ $total       = $total       ?? 0;
                                 <td>
                                     <div class="fw-semibold"><?= e($ent['raison_sociale']) ?></div>
                                     <?php if ($ent['activite_principale'] ?? ''): ?>
-                                        <small class="text-muted"><?= e(mb_substr($ent['activite_principale'],0,50)) ?><?= strlen($ent['activite_principale'])>50 ? '…' : '' ?></small>
+                                        <small class="text-muted">
+                                            <?= e(mb_substr($ent['activite_principale'], 0, 55)) ?>
+                                            <?= mb_strlen($ent['activite_principale']) > 55 ? '…' : '' ?>
+                                        </small>
                                     <?php endif; ?>
                                 </td>
                                 <td>
@@ -128,22 +135,42 @@ $total       = $total       ?? 0;
                                 </td>
                                 <td>
                                     <?php if ($ent['branche_libelle'] ?? ''): ?>
-                                        <span class="badge bg-info text-dark" style="font-size:.72rem"><?= e($ent['branche_libelle']) ?></span>
+                                        <span class="badge bg-info text-dark" style="font-size:.72rem">
+                                            <?= e($ent['branche_libelle']) ?>
+                                        </span>
                                     <?php else: ?>
                                         <span class="text-muted">—</span>
                                     <?php endif; ?>
                                 </td>
                                 <td><small><?= e($ent['localite'] ?? '—') ?></small></td>
                                 <td class="text-center">
-                                    <span class="badge bg-<?= ($ent['nb_declarations']??0)>0 ? 'primary' : 'secondary' ?>">
-                                        <?= (int)($ent['nb_declarations']??0) ?>
+                                    <span class="badge bg-<?= (int)($ent['nb_declarations'] ?? 0) > 0 ? 'primary' : 'secondary' ?>">
+                                        <?= (int)($ent['nb_declarations'] ?? 0) ?>
                                     </span>
                                 </td>
                                 <td class="text-center">
-                                    <a href="<?= url("agent/entreprise/{$ent['id']}/modifier") ?>"
-                                       class="btn btn-sm btn-outline-primary" title="Modifier">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
+                                    <div class="btn-group btn-group-sm">
+                                        <!-- Modifier -->
+                                        <a href="<?= url("agent/entreprise/{$ent['id']}/modifier") ?>"
+                                           class="btn btn-outline-primary" title="Modifier">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <!-- Supprimer (seulement si 0 déclaration) -->
+                                        <?php if ((int)($ent['nb_declarations'] ?? 0) === 0): ?>
+                                        <button type="button"
+                                                class="btn btn-outline-danger btn-supprimer-ent"
+                                                data-id="<?= $ent['id'] ?>"
+                                                data-nom="<?= e($ent['raison_sociale']) ?>"
+                                                title="Supprimer">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        <?php else: ?>
+                                        <button type="button" class="btn btn-outline-secondary" disabled
+                                                title="Impossible : déclarations liées">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -155,13 +182,18 @@ $total       = $total       ?? 0;
             <?php if (($pagination['total_pages'] ?? 1) > 1): ?>
                 <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
                     <small class="text-muted">
-                        Affichage <?= $pagination['offset']+1 ?>–<?= min($pagination['offset']+$pagination['per_page'], $total) ?> sur <?= number_format($total) ?>
+                        Affichage
+                        <?= ($pagination['offset'] ?? 0) + 1 ?>–<?= min(($pagination['offset'] ?? 0) + ($pagination['per_page'] ?? 20), $total) ?>
+                        sur <?= number_format($total) ?>
                     </small>
                     <nav>
                         <ul class="pagination pagination-sm mb-0">
                             <?php for ($p = 1; $p <= $pagination['total_pages']; $p++): ?>
-                                <li class="page-item <?= $p === $pagination['current_page'] ? 'active' : '' ?>">
-                                    <a class="page-link" href="?<?= http_build_query(array_merge($filters, ['page'=>$p])) ?>"><?= $p ?></a>
+                                <li class="page-item <?= $p === ($pagination['current_page'] ?? 1) ? 'active' : '' ?>">
+                                    <a class="page-link"
+                                       href="?<?= http_build_query(array_merge($filters, ['page' => $p])) ?>">
+                                        <?= $p ?>
+                                    </a>
                                 </li>
                             <?php endfor; ?>
                         </ul>
@@ -171,3 +203,48 @@ $total       = $total       ?? 0;
         <?php endif; ?>
     </div>
 </div>
+
+<!-- ── Modal suppression entreprise ── -->
+<div class="modal fade" id="modalSupprimerEnt" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-trash me-2"></i>Supprimer l'entreprise
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="formSupprimerEnt">
+                <?= csrfField() ?>
+                <div class="modal-body">
+                    <div class="alert alert-warning py-2 mb-3">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Cette action est <strong>irréversible</strong>. L'entreprise sera désactivée.
+                    </div>
+                    <p>Supprimer l'entreprise <strong id="nomEntreprise"></strong> ?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>Confirmer la suppression
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const BASE_ENT = (window.APP_BASE ?? '').replace(/\/+$/, '');
+
+document.querySelectorAll('.btn-supprimer-ent').forEach(btn => {
+    btn.addEventListener('click', function () {
+        const id  = this.dataset.id;
+        const nom = this.dataset.nom;
+        document.getElementById('nomEntreprise').textContent = nom;
+        document.getElementById('formSupprimerEnt').action =
+            `${BASE_ENT}/agent/entreprise/${id}/supprimer`;
+        new bootstrap.Modal(document.getElementById('modalSupprimerEnt')).show();
+    });
+});
+</script>

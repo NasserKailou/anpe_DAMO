@@ -957,7 +957,48 @@ $motifs = [
 const BASE = (window.APP_BASE ?? '').replace(/\/+$/, '');
 const DECL_ID_RAMO = '<?= $decId ?>';
 
-// ─── Effectifs mensuels ────────────────────────────────────
+// ─── Filtre dynamique Département → Commune (étape 1) ───────────────────────
+(function () {
+    const selDept    = document.getElementById('sel-dept');
+    const selCommune = document.getElementById('sel-commune');
+    if (!selDept || !selCommune) return;
+
+    const savedCommuneId = <?= (int)($entreprise['commune_id'] ?? 0) ?>;
+
+    async function loadCommunes(deptId, preselectId = 0) {
+        if (!deptId) {
+            selCommune.innerHTML = '<option value="">-- Commune --</option>';
+            return;
+        }
+        selCommune.innerHTML = '<option value="">Chargement…</option>';
+        selCommune.disabled  = true;
+        try {
+            const resp = await fetch(`${BASE}/api/communes/${deptId}`);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            const list = data.communes ?? data ?? [];
+            selCommune.innerHTML = '<option value="">-- Commune --</option>';
+            list.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value       = c.id;
+                opt.textContent = c.nom;
+                if (preselectId && parseInt(c.id) === preselectId) opt.selected = true;
+                selCommune.appendChild(opt);
+            });
+        } catch (err) {
+            console.error('Communes API error:', err);
+            selCommune.innerHTML = '<option value="">-- Erreur --</option>';
+        } finally {
+            selCommune.disabled = false;
+        }
+    }
+
+    selDept.addEventListener('change', function () {
+        loadCommunes(this.value, 0);
+    });
+})();
+
+
 function calcMensuels() {
     const inputs = document.querySelectorAll('.eff-mensuel');
     let sum = 0, max = 0, dec = 0, cnt = 0;

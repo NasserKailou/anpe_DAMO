@@ -25,7 +25,7 @@
                     </a>
                 </div>
                 <?php else: ?>
-                <form method="POST" action="<?= url('agent/declaration/creer') ?>">
+                <form method="POST" action="<?= url('agent/declaration/nouvelle') ?>">
                     <?= csrfField() ?>
                     <div class="mb-4">
                         <label class="form-label fw-bold fs-6">
