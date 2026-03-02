@@ -1,216 +1,233 @@
 /**
- * e-DAMO - JavaScript Formulaire de Saisie Multi-étapes
+ * e-DAMO — JavaScript Formulaire de Saisie Multi-étapes (RAMO 2025)
+ * Compatible avec declaration_saisie.php (classes .ramo-step / .ramo-sep, 8 étapes)
  */
+
 const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 const DECL_ID    = document.getElementById('wizard-form')?.dataset.declId ?? 0;
-const BASE        = (window.APP_BASE ?? '').replace(/\/+$/, '');
+const TOTAL_ETAPES = parseInt(document.getElementById('wizard-form')?.dataset.totalEtapes ?? '8');
+const BASE       = (window.APP_BASE ?? '').replace(/\/+$/, '');
 
-let currentEtape = parseInt(document.getElementById('wizard-form')?.dataset.etape ?? '1');
+let currentEtape  = parseInt(document.getElementById('wizard-form')?.dataset.etape ?? '1');
 let autoSaveTimer = null;
 
+/* ═══════════════════════════════════════════════════════════════
+   INITIALISATION
+═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
     showEtape(currentEtape);
     bindNavButtons();
-    bindTableCalculations();
     bindAutoSave();
-    updateProgress();
+    // Les calculs sont déjà initialisés dans la vue inline
 });
 
+/* ═══════════════════════════════════════════════════════════════
+   NAVIGATION WIZARD (utilisée aussi par goToStep inline dans la vue)
+═══════════════════════════════════════════════════════════════ */
 function showEtape(n) {
+    n = Math.max(1, Math.min(TOTAL_ETAPES, n));
+
+    // Masquer toutes les sections
     document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.wizard-step').forEach((s, i) => {
-        s.classList.remove('active');
-        if (i + 1 < n) s.classList.add('done'); else s.classList.remove('done');
-    });
-    document.querySelectorAll('.wizard-sep').forEach((s, i) => {
-        if (i + 1 < n) s.classList.add('done'); else s.classList.remove('done');
-    });
-    const section = document.getElementById(`etape-${n}`);
+
+    // Afficher la section cible
+    const section = document.getElementById('etape-' + n);
     if (section) section.classList.add('active');
-    const step = document.querySelector(`.wizard-step[data-step="${n}"]`);
-    if (step) step.classList.add('active');
+
+    // Mettre à jour les indicateurs du wizard (.ramo-step)
+    document.querySelectorAll('.ramo-step').forEach(step => {
+        const stepNum = parseInt(step.dataset.step);
+        step.classList.remove('active', 'done');
+        if (stepNum === n) step.classList.add('active');
+        else if (stepNum < n) step.classList.add('done');
+    });
+
+    // Mettre à jour les séparateurs (.ramo-sep)
+    document.querySelectorAll('.ramo-sep').forEach((sep, i) => {
+        sep.classList.toggle('done', (i + 1) < n);
+    });
+
+    // Mettre à jour l'icône checkmark dans les étapes passées
+    document.querySelectorAll('.ramo-step').forEach(step => {
+        const stepNum = parseInt(step.dataset.step);
+        const numEl   = step.querySelector('.ramo-step-num');
+        if (!numEl) return;
+        if (stepNum < n) {
+            numEl.innerHTML = '<i class="bi bi-check-lg"></i>';
+        } else {
+            numEl.textContent = stepNum;
+        }
+    });
+
+    // Mettre à jour le champ caché
+    const inputEtape = document.getElementById('input-etape');
+    if (inputEtape) inputEtape.value = n;
+
     currentEtape = n;
-    updateProgress();
+    updateProgress(n);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function updateProgress() {
-    const pct = Math.round((currentEtape / 7) * 100);
-    const bar = document.querySelector('.progress-bar-declaration .fill');
+// Exposition globale pour l'attribut onclick="goToStep(n)" de la vue
+window.goToStep = function(n) {
+    showEtape(n);
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   BARRE DE PROGRESSION
+═══════════════════════════════════════════════════════════════ */
+function updateProgress(n) {
+    const pct = Math.round((n / TOTAL_ETAPES) * 100);
+    const bar = document.querySelector('.progress-ramo .fill');
     if (bar) bar.style.width = pct + '%';
     const label = document.getElementById('progress-label');
-    if (label) label.textContent = `Étape ${currentEtape}/7 — ${pct}%`;
+    if (label) label.textContent = `Avancement : ${pct}% — Étape ${n}/${TOTAL_ETAPES}`;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   BOUTONS NAVIGATION
+═══════════════════════════════════════════════════════════════ */
 function bindNavButtons() {
-    document.querySelectorAll('.btn-next').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (await saveCurrentEtape()) {
-                if (currentEtape < 7) showEtape(currentEtape + 1);
-            }
-        });
+    // Bouton "Suivant" → sauvegarder puis avancer
+    document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-next');
+        if (!btn) return;
+        e.preventDefault();
+        const ok = await saveCurrentEtape(false); // sauvegarde silencieuse
+        if (ok && currentEtape < TOTAL_ETAPES) showEtape(currentEtape + 1);
     });
-    document.querySelectorAll('.btn-prev').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (currentEtape > 1) showEtape(currentEtape - 1);
-        });
+
+    // Bouton "Précédent" → juste naviguer (sans sauvegarder)
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-prev');
+        if (!btn) return;
+        e.preventDefault();
+        if (currentEtape > 1) showEtape(currentEtape - 1);
     });
-    document.querySelectorAll('.btn-save').forEach(btn => {
-        btn.addEventListener('click', () => saveCurrentEtape());
-    });
-    document.querySelectorAll('.btn-submit').forEach(btn => {
-        btn.addEventListener('click', () => soumettreDeclaration());
-    });
-    document.querySelectorAll('.wizard-step').forEach(step => {
-        step.addEventListener('click', () => {
-            const n = parseInt(step.dataset.step);
-            if (!isNaN(n)) showEtape(n);
-        });
+
+    // Bouton "Sauvegarder" (submit)
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-save');
+        if (!btn) return;
+        // Laisser le formulaire se soumettre normalement (POST standard)
+        // L'input#input-etape contient l'étape courante
     });
 }
 
-async function saveCurrentEtape() {
+/* ═══════════════════════════════════════════════════════════════
+   SAUVEGARDE AJAX
+═══════════════════════════════════════════════════════════════ */
+async function saveCurrentEtape(showFeedback = true) {
     setAutoSaveStatus('saving');
     const form = document.getElementById('wizard-form');
     if (!form) return false;
+
     const fd = new FormData(form);
     fd.set('etape', currentEtape);
-    fd.append('_csrf_token', CSRF_TOKEN);
+    // Assurer que le CSRF est bien présent
+    if (!fd.has('_csrf_token') || !fd.get('_csrf_token')) {
+        fd.set('_csrf_token', CSRF_TOKEN);
+    }
 
     try {
         const resp = await fetch(`${BASE}/agent/declaration/${DECL_ID}/sauvegarder`, {
-            method: 'POST', body: fd,
+            method: 'POST',
+            body: fd,
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
+
+        if (!resp.ok) {
+            setAutoSaveStatus('error');
+            if (showFeedback) showToast('Erreur HTTP ' + resp.status, 'danger');
+            return false;
+        }
+
         const json = await resp.json();
         setAutoSaveStatus(json.success ? 'saved' : 'error');
-        if (!json.success) showToast('Erreur de sauvegarde', 'danger');
-        return json.success;
-    } catch (e) {
+        if (!json.success && showFeedback) {
+            showToast(json.message ?? 'Erreur de sauvegarde', 'danger');
+        }
+        return json.success === true;
+
+    } catch (err) {
         setAutoSaveStatus('error');
-        showToast('Erreur réseau', 'danger');
+        if (showFeedback) showToast('Erreur réseau. Vérifiez votre connexion.', 'danger');
         return false;
     }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   INDICATEUR AUTOSAVE
+═══════════════════════════════════════════════════════════════ */
 function setAutoSaveStatus(status) {
     const el = document.getElementById('autosave-status');
     if (!el) return;
-    const msgs = { saving: '⏳ Sauvegarde...', saved: '✓ Sauvegardé', error: '✗ Erreur sauvegarde' };
-    const classes = { saving: 'saving', saved: '', error: 'error' };
-    el.textContent = msgs[status] ?? '';
-    el.className = 'autosave-indicator ' + (classes[status] ?? '');
+    const cfg = {
+        saving: { text: 'Sauvegarde…',       icon: 'bi-cloud-arrow-up', cls: 'saving' },
+        saved:  { text: 'Sauvegardé',         icon: 'bi-cloud-check',    cls: 'saved'  },
+        error:  { text: 'Erreur sauvegarde',  icon: 'bi-cloud-slash',    cls: 'error'  },
+    };
+    const c = cfg[status] ?? cfg.saved;
+    el.innerHTML = `<i class="bi ${c.icon}"></i><span>${c.text}</span>`;
+    el.className = `autosave-indicator ${c.cls}`;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   AUTOSAVE (déclenché 3 s après la dernière modification)
+═══════════════════════════════════════════════════════════════ */
 function bindAutoSave() {
+    document.getElementById('wizard-form')?.addEventListener('input', () => {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => saveCurrentEtape(false), 3000);
+    });
     document.getElementById('wizard-form')?.addEventListener('change', () => {
         clearTimeout(autoSaveTimer);
-        autoSaveTimer = setTimeout(saveCurrentEtape, 3000);
+        autoSaveTimer = setTimeout(() => saveCurrentEtape(false), 3000);
     });
 }
 
-function bindTableCalculations() {
-    // Calculs automatiques dans les tableaux de saisie
-    document.querySelectorAll('.table-saisie input[type=number]').forEach(input => {
-        input.addEventListener('input', () => recalculateRow(input));
-    });
-
-    // Formation: afficher/cacher le formulaire selon oui/non
-    const radioFormation = document.querySelectorAll('input[name="a_eu_formation"]');
-    const detailFormation = document.getElementById('formation-details');
-    if (radioFormation.length && detailFormation) {
-        radioFormation.forEach(r => {
-            r.addEventListener('change', () => {
-                detailFormation.style.display = r.value === '1' ? 'block' : 'none';
-            });
-        });
-    }
-
-    // Effectifs étrangers: bouton ajouter ligne
-    document.getElementById('btn-add-etranger')?.addEventListener('click', addEtrangerRow);
-}
-
-function recalculateRow(input) {
-    const row = input.closest('tr');
-    if (!row) return;
-    const inputs = row.querySelectorAll('input[type=number]');
-    let total = 0;
-    inputs.forEach(i => { if (!i.dataset.nototal) total += parseInt(i.value || 0); });
-    const totalCell = row.querySelector('.total-cell');
-    if (totalCell) totalCell.textContent = total;
-    recalculateColumn(input);
-}
-
-function recalculateColumn(input) {
-    const table = input.closest('table');
-    if (!table) return;
-    const colIndex = Array.from(input.closest('tr').cells).indexOf(input.closest('td'));
-    let total = 0;
-    table.querySelectorAll(`tbody tr:not(.total-row) td:nth-child(${colIndex + 1}) input`).forEach(i => {
-        total += parseInt(i.value || 0);
-    });
-    const totalRow = table.querySelector(`.total-row td:nth-child(${colIndex + 1})`);
-    if (totalRow) totalRow.textContent = total;
-}
-
-let etrangerIndex = 0;
-function addEtrangerRow() {
-    const tbody = document.getElementById('etrangers-tbody');
-    if (!tbody) return;
-    etrangerIndex++;
-    const tr = document.createElement('tr');
-    tr.className = 'etrangers-row';
-    tr.innerHTML = `
-        <td><input type="text" class="form-control form-control-sm" name="etrangers[${etrangerIndex}][pays]" placeholder="Pays"></td>
-        <td><input type="text" class="form-control form-control-sm" name="etrangers[${etrangerIndex}][qualification]" placeholder="Qualification"></td>
-        <td><input type="text" class="form-control form-control-sm" name="etrangers[${etrangerIndex}][fonction]" placeholder="Fonction"></td>
-        <td><select class="form-select form-select-sm" name="etrangers[${etrangerIndex}][sexe]">
-            <option value="H">Homme</option><option value="F">Femme</option>
-        </select></td>
-        <td><input type="number" class="form-control form-control-sm" name="etrangers[${etrangerIndex}][nombre]" min="0" value="0"></td>
-        <td><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()">×</button></td>
-    `;
-    tbody.appendChild(tr);
-}
-
-async function soumettreDeclaration() {
-    if (!confirm('Confirmez-vous la soumission définitive de cette déclaration à l\'ANPE Niger ?')) return;
-
-    // Sauvegarder d'abord l'étape courante
-    await saveCurrentEtape();
-
-    const fd = new FormData();
-    fd.append('_csrf_token', CSRF_TOKEN);
-
-    try {
-        const resp = await fetch(`${BASE}/agent/declaration/${DECL_ID}/soumettre`, {
-            method: 'POST', body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-        const json = await resp.json();
-        if (json.success) {
-            showToast('Déclaration soumise avec succès !', 'success');
-            setTimeout(() => location.href = json.redirect ?? `${BASE}/agent/declaration/${DECL_ID}/apercu`, 1500);
-        } else {
-            showToast(json.message ?? 'Erreur lors de la soumission', 'danger');
-        }
-    } catch {
-        showToast('Erreur réseau', 'danger');
-    }
-}
-
+/* ═══════════════════════════════════════════════════════════════
+   NOTIFICATIONS TOAST
+═══════════════════════════════════════════════════════════════ */
 function showToast(msg, type = 'info') {
-    let c = document.getElementById('toast-container');
-    if (!c) {
-        c = document.createElement('div');
-        c.id = 'toast-container';
-        c.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;';
-        document.body.appendChild(c);
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText =
+            'position:fixed;top:20px;right:20px;z-index:9999;' +
+            'display:flex;flex-direction:column;gap:8px;max-width:340px;';
+        document.body.appendChild(container);
     }
-    const colors = { success: '#2e7d32', danger: '#c62828', warning: '#f57f17', info: '#01579b' };
+    const colors = {
+        success: '#2e7d32',
+        danger:  '#c62828',
+        warning: '#e65100',
+        info:    '#01579b',
+    };
+    const icons = {
+        success: 'bi-check-circle-fill',
+        danger:  'bi-exclamation-triangle-fill',
+        warning: 'bi-exclamation-circle-fill',
+        info:    'bi-info-circle-fill',
+    };
     const t = document.createElement('div');
-    t.style.cssText = `background:${colors[type]??'#333'};color:#fff;padding:12px 18px;border-radius:8px;font-size:.85rem;max-width:320px;box-shadow:0 4px 12px rgba(0,0,0,.2)`;
-    t.textContent = msg;
-    c.appendChild(t);
-    setTimeout(() => t.remove(), 4000);
+    t.style.cssText =
+        `background:${colors[type] ?? '#333'};color:#fff;` +
+        'padding:12px 16px;border-radius:8px;font-size:.85rem;' +
+        'box-shadow:0 4px 14px rgba(0,0,0,.25);display:flex;align-items:center;gap:10px;';
+    t.innerHTML = `<i class="bi ${icons[type] ?? 'bi-bell'}" style="flex-shrink:0"></i><span>${msg}</span>`;
+    container.appendChild(t);
+    setTimeout(() => {
+        t.style.transition = 'opacity .4s';
+        t.style.opacity    = '0';
+        setTimeout(() => t.remove(), 400);
+    }, 4000);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   EXPOSITION GLOBALE (utilisée dans declaration_saisie.php)
+═══════════════════════════════════════════════════════════════ */
+window.showEtapeRamo    = showEtape;
+window.showToastRamo    = showToast;
+window.saveCurrentEtape = saveCurrentEtape;

@@ -237,7 +237,7 @@ class DeclarationController extends BaseController
             redirect("agent/declaration/$id/apercu");
         }
 
-        $etape = max(1, min(7, (int) (get('etape') ?? $declaration['etape_courante'] ?? 1)));
+        $etape = max(1, min(8, (int) (get('etape') ?? $declaration['etape_courante'] ?? 1)));
 
         // Charger les données de chaque section
         $data = $this->chargerDonneesDeclaration((int) $id);
@@ -280,9 +280,9 @@ class DeclarationController extends BaseController
         $etape = (int) (post('etape') ?? get('etape') ?? 1);
         $result = $this->sauvegarderEtapeData((int) $id, $etape);
 
-        // Mettre à jour l'étape courante
+        // Mettre à jour l'étape courante (8 étapes au total pour le RAMO)
         $etapeCourante = max($etape, (int) $declaration['etape_courante']);
-        $completion    = (int) (($etapeCourante / 7) * 100);
+        $completion    = (int) (($etapeCourante / 8) * 100);
         $this->db->execute(
             "UPDATE declarations SET etape_courante = $1, pourcentage_completion = $2, updated_at = NOW() WHERE id = $3",
             [$etapeCourante, $completion, (int) $id]
@@ -292,7 +292,7 @@ class DeclarationController extends BaseController
             $this->json(['success' => $result, 'message' => $result ? 'Sauvegardé' : 'Erreur de sauvegarde', 'etape' => $etape]);
         }
 
-        $nextEtape = $etape < 7 ? $etape + 1 : $etape;
+        $nextEtape = $etape < 8 ? $etape + 1 : $etape;
         redirect("agent/declaration/$id/saisie?etape=$nextEtape");
     }
 
@@ -303,18 +303,17 @@ class DeclarationController extends BaseController
     {
         try {
             switch ($etape) {
-                case 1: // Identification entreprise + masse salariale
+                case 1: // Section I — Identification entreprise + masse salariale
                     $masseSalariale = post('masse_salariale', null);
                     $nomEnqueteur   = sanitize(post('nom_enqueteur', ''));
                     $this->db->execute(
                         "UPDATE declarations SET masse_salariale = $1, nom_enqueteur = $2, updated_at = NOW() WHERE id = $3",
                         [$masseSalariale ?: null, $nomEnqueteur, $decId]
                     );
-                    // Mettre à jour les infos entreprise
                     $this->updateEntrepriseFromDeclaration($decId);
                     break;
 
-                case 2: // Effectifs mensuels
+                case 2: // Section II — Effectifs mensuels
                     $effectifs = post('effectifs', []);
                     for ($m = 1; $m <= 12; $m++) {
                         $val = positiveInt($effectifs[$m] ?? 0);
@@ -326,7 +325,7 @@ class DeclarationController extends BaseController
                     }
                     break;
 
-                case 3: // Catégories × origines × sexes
+                case 3: // Section III.1 — Catégories × origines × sexes
                     $categories = post('categories', []);
                     foreach (array_keys(CATEGORIES_PROFESSIONNELLES) as $cat) {
                         $row = $categories[$cat] ?? [];
@@ -348,7 +347,7 @@ class DeclarationController extends BaseController
                     }
                     break;
 
-                case 4: // Niveaux d'instruction
+                case 4: // Section III.2 — Niveaux d'instruction × catégories
                     $niveaux = post('niveaux', []);
                     foreach (array_keys(CATEGORIES_PROFESSIONNELLES) as $cat) {
                         foreach (array_keys(NIVEAUX_INSTRUCTION) as $niv) {
@@ -363,29 +362,46 @@ class DeclarationController extends BaseController
                     }
                     break;
 
-                case 5: // Formation professionnelle
+                case 5: // Section III.3 — Formation professionnelle continue (multi-lignes)
                     $aEuFormation = post('a_eu_formation', '0') === '1';
-                    $qualification = sanitize(post('qualification', ''));
-                    $nature        = sanitize(post('nature_formation', ''));
-                    $duree         = sanitize(post('duree_formation', ''));
-                    $effectifH     = positiveInt(post('formation_h', 0));
-                    $effectifF     = positiveInt(post('formation_f', 0));
-                    $observations  = sanitize(post('observations', ''));
+                    $formationsPost = post('formations', []);
+                    $observations   = sanitize(post('formation_observations', ''));
 
-                    $this->db->execute(
-                        "UPDATE declaration_formations
-                         SET a_eu_formation=$1, qualification=$2, nature_formation=$3, duree_formation=$4,
-                             effectif_h=$5, effectif_f=$6, observations=$7, updated_at=NOW()
-                         WHERE declaration_id=$8",
-                        [$aEuFormation, $qualification, $nature, $duree, $effectifH, $effectifF, $observations, $decId]
-                    );
+                    // Supprimer les anciennes lignes et re-insérer
+                    $this->db->execute("DELETE FROM declaration_formations WHERE declaration_id = $1", [$decId]);
+
+                    if ($aEuFormation && !empty($formationsPost)) {
+                        foreach ($formationsPost as $idx => $fRow) {
+                            $qualification = sanitize($fRow['qualification'] ?? '');
+                            $nature        = sanitize($fRow['nature_formation'] ?? '');
+                            $duree         = sanitize($fRow['duree_formation'] ?? '');
+                            $effectifH     = positiveInt($fRow['effectif_h'] ?? 0);
+                            $effectifF     = positiveInt($fRow['effectif_f'] ?? 0);
+                            if (empty($qualification) && empty($nature) && $effectifH === 0 && $effectifF === 0) continue;
+                            $this->db->execute(
+                                "INSERT INTO declaration_formations
+                                 (declaration_id, a_eu_formation, qualification, nature_formation, duree_formation,
+                                  effectif_h, effectif_f, observations, ligne_ordre)
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                                [$decId, true, $qualification, $nature, $duree,
+                                 $effectifH, $effectifF, $observations, (int)$idx + 1]
+                            );
+                        }
+                    } else {
+                        // Insérer une ligne vide pour indiquer "Pas de formation"
+                        $this->db->execute(
+                            "INSERT INTO declaration_formations (declaration_id, a_eu_formation, ligne_ordre)
+                             VALUES ($1, FALSE, 1)",
+                            [$decId]
+                        );
+                    }
                     break;
 
-                case 6: // Pertes d'emploi
+                case 6: // Section IV — Pertes d'emploi
                     $pertes = post('pertes', []);
                     foreach (array_keys(MOTIFS_PERTE_EMPLOI) as $motif) {
-                        $row         = $pertes[$motif] ?? [];
-                        $motifAutre  = $motif === 'autres' ? sanitize($row['autre_precision'] ?? '') : null;
+                        $row        = $pertes[$motif] ?? [];
+                        $motifAutre = $motif === 'autres' ? sanitize($row['motif_autre'] ?? '') : null;
                         $this->db->execute(
                             "UPDATE declaration_pertes_emploi
                              SET effectif_h=$1, effectif_f=$2, motif_autre=$3, updated_at=NOW()
@@ -393,8 +409,9 @@ class DeclarationController extends BaseController
                             [positiveInt($row['h'] ?? 0), positiveInt($row['f'] ?? 0), $motifAutre, $decId, $motif]
                         );
                     }
+                    break;
 
-                    // Perspectives
+                case 7: // Section V — Perspectives d'emploi
                     $perspective   = sanitize(post('perspective', ''));
                     $justification = sanitize(post('justification', ''));
                     $this->db->execute(
@@ -404,17 +421,27 @@ class DeclarationController extends BaseController
                     );
                     break;
 
-                case 7: // Effectifs étrangers
-                    // Supprimer et re-insérer
+                case 8: // Section VI — Effectifs étrangers + totaux MON/MOE
+                    $totalNigeriens = positiveInt(post('total_nigeriens', 0));
+                    $totalEtrangers = positiveInt(post('total_etrangers', 0));
+                    $this->db->execute(
+                        "UPDATE declarations SET total_nigeriens=$1, total_etrangers=$2, updated_at=NOW() WHERE id=$3",
+                        [$totalNigeriens, $totalEtrangers, $decId]
+                    );
+
+                    // Supprimer et re-insérer les lignes étrangers
                     $this->db->execute("DELETE FROM declaration_effectifs_etrangers WHERE declaration_id = $1", [$decId]);
                     $etrangers = post('etrangers', []);
                     foreach ($etrangers as $row) {
                         if (empty($row['pays'])) continue;
                         $this->db->execute(
-                            "INSERT INTO declaration_effectifs_etrangers (declaration_id, pays, qualification, fonction, sexe, nombre)
+                            "INSERT INTO declaration_effectifs_etrangers
+                             (declaration_id, pays, qualification, fonction, sexe, nombre)
                              VALUES ($1, $2, $3, $4, $5, $6)",
-                            [$decId, sanitize($row['pays']), sanitize($row['qualification'] ?? ''),
-                             sanitize($row['fonction'] ?? ''), sanitize($row['sexe'] ?? 'H'),
+                            [$decId, sanitize($row['pays']),
+                             sanitize($row['qualification'] ?? ''),
+                             sanitize($row['fonction'] ?? ''),
+                             sanitize($row['sexe'] ?? 'H'),
                              positiveInt($row['nombre'] ?? 0)]
                         );
                     }
@@ -422,7 +449,7 @@ class DeclarationController extends BaseController
             }
             return true;
         } catch (\Exception $e) {
-            error_log('Erreur sauvegarde étape ' . $etape . ': ' . $e->getMessage());
+            error_log('Erreur sauvegarde étape RAMO ' . $etape . ': ' . $e->getMessage());
             return false;
         }
     }
@@ -575,6 +602,279 @@ class DeclarationController extends BaseController
     }
 
     /**
+     * Afficher le formulaire d'import CSV pour une déclaration
+     * Route : GET /agent/declaration/:id/import-csv
+     */
+    public function importCsvForm(string $id): void
+    {
+        $user        = currentUser();
+        $declaration = $this->getDeclarationForAgent((int) $id, $user);
+
+        if (!$declaration) {
+            redirectWith('agent/declarations', 'error', 'Déclaration introuvable.');
+        }
+
+        if (!in_array($declaration['statut'], ['brouillon', 'corrigee'])) {
+            redirectWith("agent/declaration/$id/apercu", 'error', 'Cette déclaration ne peut plus être modifiée.');
+        }
+
+        $this->render('agent.import_declaration_csv', [
+            'pageTitle'   => 'Import CSV — Déclaration',
+            'declaration' => $declaration,
+            'breadcrumbs' => [
+                ['label' => 'Mes déclarations', 'url' => '/agent/declarations'],
+                ['label' => 'Saisie #' . $declaration['code_questionnaire'], 'url' => "agent/declaration/$id/saisie"],
+                ['label' => 'Import CSV', 'url' => false],
+            ],
+        ]);
+    }
+
+    /**
+     * Traiter l'import CSV d'une déclaration RAMO
+     * Route : POST /agent/declaration/:id/import-csv
+     *
+     * Format CSV attendu (section choisie via le champ "section") :
+     *
+     * Section effectifs_mensuels :
+     *   mois,effectif
+     *   1,245
+     *   ...
+     *
+     * Section categories :
+     *   categorie,nigeriens_h,nigeriens_f,africains_h,africains_f,autres_nat_h,autres_nat_f
+     *   cadres_superieurs,5,2,1,0,0,0
+     *   ...
+     *
+     * Section niveaux :
+     *   categorie,niveau,effectif_h,effectif_f
+     *   cadres_superieurs,superieur_3,3,1
+     *   ...
+     *
+     * Section formations :
+     *   qualification,nature_formation,duree_formation,effectif_h,effectif_f
+     *   Informatique,Recyclage,3 mois,5,2
+     *   ...
+     *
+     * Section pertes :
+     *   motif,effectif_h,effectif_f,motif_autre
+     *   licenciement,3,1,
+     *   ...
+     *
+     * Section etrangers :
+     *   pays,qualification,fonction,sexe,nombre
+     *   France,Ingénieur,Directeur technique,H,2
+     *   ...
+     */
+    public function importCsv(string $id): void
+    {
+        $this->requireCsrf();
+        $user        = currentUser();
+        $declaration = $this->getDeclarationForAgent((int) $id, $user);
+
+        if (!$declaration) {
+            redirectWith('agent/declarations', 'error', 'Déclaration introuvable.');
+        }
+
+        if (!in_array($declaration['statut'], ['brouillon', 'corrigee'])) {
+            redirectWith("agent/declaration/$id/apercu", 'error', 'Cette déclaration ne peut plus être modifiée.');
+        }
+
+        $section = post('section', '');
+        $file    = $_FILES['fichier_csv'] ?? null;
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            redirectWith("agent/declaration/$id/import-csv", 'error', 'Aucun fichier CSV sélectionné ou erreur d\'upload.');
+        }
+
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['csv', 'txt'])) {
+            redirectWith("agent/declaration/$id/import-csv", 'error', 'Format de fichier non supporté. Utilisez un fichier CSV (.csv ou .txt).');
+        }
+
+        $handle = fopen($file['tmp_name'], 'r');
+        if (!$handle) {
+            redirectWith("agent/declaration/$id/import-csv", 'error', 'Impossible de lire le fichier.');
+        }
+
+        // Détecter le séparateur (virgule ou point-virgule)
+        $firstLine = fgets($handle);
+        rewind($handle);
+        $sep = substr_count($firstLine, ';') >= substr_count($firstLine, ',') ? ';' : ',';
+
+        // Lire l'en-tête
+        $header = fgetcsv($handle, 1000, $sep);
+        if (!$header) {
+            fclose($handle);
+            redirectWith("agent/declaration/$id/import-csv", 'error', 'Fichier CSV vide ou illisible.');
+        }
+        $header = array_map('trim', array_map('strtolower', $header));
+
+        $imported = 0;
+        $errors   = [];
+        $decIdInt = (int) $id;
+
+        try {
+            $this->db->beginTransaction();
+
+            switch ($section) {
+
+                case 'effectifs_mensuels':
+                    while (($row = fgetcsv($handle, 1000, $sep)) !== false) {
+                        $r = array_combine($header, array_map('trim', $row));
+                        if (!$r) continue;
+                        $mois = (int)($r['mois'] ?? 0);
+                        $eff  = (int)($r['effectif'] ?? 0);
+                        if ($mois < 1 || $mois > 12) { $errors[] = "Mois invalide: $mois"; continue; }
+                        $this->db->execute(
+                            "UPDATE declaration_effectifs_mensuels SET effectif=$1, updated_at=NOW()
+                             WHERE declaration_id=$2 AND mois=$3",
+                            [$eff, $decIdInt, $mois]
+                        );
+                        $imported++;
+                    }
+                    break;
+
+                case 'categories':
+                    while (($row = fgetcsv($handle, 1000, $sep)) !== false) {
+                        $r = array_combine($header, array_map('trim', $row));
+                        if (!$r) continue;
+                        $cat = strtolower($r['categorie'] ?? '');
+                        if (!array_key_exists($cat, CATEGORIES_PROFESSIONNELLES)) {
+                            $errors[] = "Catégorie inconnue: $cat"; continue;
+                        }
+                        $this->db->execute(
+                            "UPDATE declaration_categories_effectifs
+                             SET nigeriens_h=$1, nigeriens_f=$2, africains_h=$3, africains_f=$4,
+                                 autres_nat_h=$5, autres_nat_f=$6, updated_at=NOW()
+                             WHERE declaration_id=$7 AND categorie=$8",
+                            [
+                                (int)($r['nigeriens_h'] ?? 0), (int)($r['nigeriens_f'] ?? 0),
+                                (int)($r['africains_h'] ?? 0), (int)($r['africains_f'] ?? 0),
+                                (int)($r['autres_nat_h'] ?? 0), (int)($r['autres_nat_f'] ?? 0),
+                                $decIdInt, $cat
+                            ]
+                        );
+                        $imported++;
+                    }
+                    break;
+
+                case 'niveaux':
+                    while (($row = fgetcsv($handle, 1000, $sep)) !== false) {
+                        $r = array_combine($header, array_map('trim', $row));
+                        if (!$r) continue;
+                        $cat = strtolower($r['categorie'] ?? '');
+                        $niv = strtolower($r['niveau'] ?? '');
+                        if (!array_key_exists($cat, CATEGORIES_PROFESSIONNELLES)) {
+                            $errors[] = "Catégorie inconnue: $cat"; continue;
+                        }
+                        if (!array_key_exists($niv, NIVEAUX_INSTRUCTION)) {
+                            $errors[] = "Niveau inconnu: $niv"; continue;
+                        }
+                        $this->db->execute(
+                            "UPDATE declaration_niveaux_instruction
+                             SET effectif_h=$1, effectif_f=$2, updated_at=NOW()
+                             WHERE declaration_id=$3 AND categorie=$4 AND niveau=$5",
+                            [(int)($r['effectif_h'] ?? 0), (int)($r['effectif_f'] ?? 0), $decIdInt, $cat, $niv]
+                        );
+                        $imported++;
+                    }
+                    break;
+
+                case 'formations':
+                    $this->db->execute("DELETE FROM declaration_formations WHERE declaration_id=$1", [$decIdInt]);
+                    $ligneOrdre = 1;
+                    while (($row = fgetcsv($handle, 1000, $sep)) !== false) {
+                        $r = array_combine($header, array_map('trim', $row));
+                        if (!$r) continue;
+                        if (empty($r['qualification']) && empty($r['nature_formation'])) continue;
+                        $this->db->execute(
+                            "INSERT INTO declaration_formations
+                             (declaration_id, a_eu_formation, qualification, nature_formation, duree_formation,
+                              effectif_h, effectif_f, ligne_ordre)
+                             VALUES ($1, TRUE, $2, $3, $4, $5, $6, $7)",
+                            [$decIdInt, sanitize($r['qualification'] ?? ''),
+                             sanitize($r['nature_formation'] ?? ''),
+                             sanitize($r['duree_formation'] ?? ''),
+                             (int)($r['effectif_h'] ?? 0), (int)($r['effectif_f'] ?? 0),
+                             $ligneOrdre++]
+                        );
+                        $imported++;
+                    }
+                    break;
+
+                case 'pertes':
+                    while (($row = fgetcsv($handle, 1000, $sep)) !== false) {
+                        $r = array_combine($header, array_map('trim', $row));
+                        if (!$r) continue;
+                        $motif = strtolower($r['motif'] ?? '');
+                        if (!array_key_exists($motif, MOTIFS_PERTE_EMPLOI)) {
+                            $errors[] = "Motif inconnu: $motif"; continue;
+                        }
+                        $motifAutre = $motif === 'autres' ? sanitize($r['motif_autre'] ?? '') : null;
+                        $this->db->execute(
+                            "UPDATE declaration_pertes_emploi
+                             SET effectif_h=$1, effectif_f=$2, motif_autre=$3, updated_at=NOW()
+                             WHERE declaration_id=$4 AND motif=$5",
+                            [(int)($r['effectif_h'] ?? 0), (int)($r['effectif_f'] ?? 0),
+                             $motifAutre, $decIdInt, $motif]
+                        );
+                        $imported++;
+                    }
+                    break;
+
+                case 'etrangers':
+                    $this->db->execute("DELETE FROM declaration_effectifs_etrangers WHERE declaration_id=$1", [$decIdInt]);
+                    while (($row = fgetcsv($handle, 1000, $sep)) !== false) {
+                        $r = array_combine($header, array_map('trim', $row));
+                        if (!$r || empty($r['pays'])) continue;
+                        $sexe = strtoupper($r['sexe'] ?? 'H');
+                        if (!in_array($sexe, ['H', 'F', 'M'])) $sexe = 'H';
+                        $this->db->execute(
+                            "INSERT INTO declaration_effectifs_etrangers
+                             (declaration_id, pays, qualification, fonction, sexe, nombre)
+                             VALUES ($1, $2, $3, $4, $5, $6)",
+                            [$decIdInt, sanitize($r['pays']),
+                             sanitize($r['qualification'] ?? ''),
+                             sanitize($r['fonction'] ?? ''),
+                             $sexe, (int)($r['nombre'] ?? 0)]
+                        );
+                        $imported++;
+                    }
+                    break;
+
+                default:
+                    $this->db->rollback();
+                    fclose($handle);
+                    redirectWith("agent/declaration/$id/import-csv", 'error', 'Section CSV inconnue.');
+                    return;
+            }
+
+            fclose($handle);
+
+            // Journaliser
+            logActivity('declaration_csv_import', 'declarations', $decIdInt, [
+                'section'  => $section,
+                'imported' => $imported,
+                'errors'   => count($errors),
+            ]);
+
+            $this->db->commit();
+
+            $msg = "$imported ligne(s) importée(s) avec succès (section : $section).";
+            if (!empty($errors)) {
+                $msg .= ' Avertissements : ' . implode('; ', array_slice($errors, 0, 3));
+            }
+            redirectWith("agent/declaration/$id/saisie", 'success', $msg);
+
+        } catch (\Exception $e) {
+            $this->db->rollback();
+            error_log('Erreur import CSV déclaration: ' . $e->getMessage());
+            fclose($handle);
+            redirectWith("agent/declaration/$id/import-csv", 'error', 'Erreur lors de l\'import : ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Mettre à jour les infos entreprise depuis la déclaration
      */
     private function updateEntrepriseFromDeclaration(int $decId): void
@@ -618,7 +918,7 @@ class DeclarationController extends BaseController
         $query = "SELECT d.*, e.raison_sociale, e.numero_cnss, e.activite_principale,
                          e.nationalite, e.localite, e.telephone AS ent_tel, e.email AS ent_email,
                          e.boite_postale, e.quartier, e.branche_id, e.departement_id, e.commune_id,
-                         e.numero_cnss, e.activites_secondaires, e.adresse,
+                         e.numero_cnss, e.activites_secondaires, e.adresse, e.fax,
                          r.nom AS region_nom, c.annee, c.libelle AS campagne_libelle
                   FROM declarations d
                   JOIN entreprises e ON e.id = d.entreprise_id

@@ -87,15 +87,18 @@
                             <div class="btn-group btn-group-sm">
                                 <a href="<?= url('agent/declaration/' . $d['id'] . '/apercu') ?>"
                                    class="btn btn-outline-secondary" title="Aperçu"><i class="bi bi-eye"></i></a>
-                                <?php if (in_array($d['statut'], ['brouillon', 'rejetee'])): ?>
+                                <?php if (in_array($d['statut'], ['brouillon', 'corrigee'])): ?>
                                 <a href="<?= url('agent/declaration/' . $d['id'] . '/saisie') ?>"
-                                   class="btn btn-outline-primary" title="Modifier"><i class="bi bi-pencil"></i></a>
-                                <?php if ($d['statut'] === 'brouillon'): ?>
+                                   class="btn btn-outline-primary" title="Saisir / Modifier"><i class="bi bi-pencil"></i></a>
+                                <a href="<?= url('agent/declaration/' . $d['id'] . '/import-csv') ?>"
+                                   class="btn btn-outline-warning" title="Import CSV"><i class="bi bi-file-earmark-spreadsheet"></i></a>
                                 <button type="button" class="btn btn-outline-success btn-soumettre"
                                         data-id="<?= $d['id'] ?>" title="Soumettre">
                                     <i class="bi bi-send"></i>
                                 </button>
-                                <?php endif; ?>
+                                <?php elseif ($d['statut'] === 'rejetee'): ?>
+                                <a href="<?= url('agent/declaration/' . $d['id'] . '/saisie') ?>"
+                                   class="btn btn-outline-primary" title="Corriger"><i class="bi bi-pencil-square"></i></a>
                                 <?php endif; ?>
                             </div>
                         </td>

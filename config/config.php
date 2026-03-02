@@ -144,6 +144,7 @@ define('REGIONS_NIGER', [
 ]);
 
 // ===== CATÉGORIES PROFESSIONNELLES =====
+// ⚠️ Les clés doivent correspondre aux valeurs ENUM de la base de données
 define('CATEGORIES_PROFESSIONNELLES', [
     'cadres_superieurs'    => 'Cadres supérieurs',
     'agents_maitrise'      => 'Agents de maîtrise',
@@ -155,16 +156,17 @@ define('CATEGORIES_PROFESSIONNELLES', [
 ]);
 
 // ===== NIVEAUX D'INSTRUCTION =====
+// ⚠️ Les clés doivent correspondre aux valeurs ENUM de la base de données
 define('NIVEAUX_INSTRUCTION', [
-    'non_scolarise'       => 'Non scolarisé',
-    'primaire'            => 'Primaire',
-    'secondaire_1er'      => 'Secondaire 1er cycle',
-    'secondaire_2eme'     => 'Secondaire 2ème cycle',
-    'moyen_prof'          => 'Moyen (Ens. Prof. & Technique)',
-    'superieur_prof'      => 'Supérieur (Ens. Prof. & Technique)',
-    'superieur_1'         => 'Supérieur 1 (Bac+2)',
-    'superieur_2'         => 'Supérieur 2 (Bac+3 ou 4)',
-    'superieur_3'         => 'Supérieur 3 (Bac+5 et plus)',
+    'non_scolarise'   => 'Non scolarisé',
+    'primaire'        => 'Primaire',
+    'secondaire_1er'  => 'Secondaire 1er cycle',
+    'secondaire_2eme' => 'Secondaire 2ème cycle',
+    'moyen_prof'      => 'Moyen (Ens. professionnel et technique)',
+    'superieur_prof'  => 'Supérieur (Ens. professionnel et technique)',
+    'superieur_1'     => 'Supérieur 1 (Bac + 2)',
+    'superieur_2'     => 'Supérieur 2 (Bac + 3 ou 4)',
+    'superieur_3'     => 'Supérieur 3 (Bac + 5 et plus)',
 ]);
 
 // ===== MOTIFS PERTE D'EMPLOI =====

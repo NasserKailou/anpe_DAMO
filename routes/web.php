@@ -64,6 +64,8 @@ Router::post('/agent/declaration/:id/soumettre', ['DeclarationController', 'soum
 Router::get('/agent/declaration/:id/apercu', ['DeclarationController', 'apercu'], ['AuthMiddleware', 'AgentMiddleware']);
 Router::get('/agent/declaration/:id/modifier', ['DeclarationController', 'modifier'], ['AuthMiddleware', 'AgentMiddleware']);
 Router::post('/agent/declaration/:id/corriger', ['DeclarationController', 'corriger'], ['AuthMiddleware', 'AgentMiddleware']);
+Router::get('/agent/declaration/:id/import-csv', ['DeclarationController', 'importCsvForm'], ['AuthMiddleware', 'AgentMiddleware']);
+Router::post('/agent/declaration/:id/import-csv', ['DeclarationController', 'importCsv'], ['AuthMiddleware', 'AgentMiddleware']);
 
 // API AJAX pour la saisie en étapes
 Router::post('/api/declaration/:id/etape/:etape', ['ApiController', 'sauvegarderEtape'], ['AuthMiddleware']);
