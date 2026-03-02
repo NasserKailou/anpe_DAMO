@@ -3,96 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Accès refusé — e-DAMO</title>
+    <title>403 – Accès interdit | <?= defined('APP_NAME') ? APP_NAME : 'e-DAMO' ?></title>
+    <link rel="stylesheet" href="<?= defined('BASE_PATH') ? BASE_PATH : '' ?>/assets/css/bootstrap.min.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex; align-items: center; justify-content: center;
-            color: #333;
-        }
-        .error-box {
-            background: #fff;
-            border-radius: 16px;
-            padding: 3rem 2.5rem;
-            text-align: center;
-            max-width: 480px;
-            width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-        }
-        .error-icon {
-            font-size: 5rem;
-            margin-bottom: 1.5rem;
-            display: block;
-        }
-        .error-code {
-            font-size: 5rem;
-            font-weight: 800;
-            color: #dc3545;
-            line-height: 1;
-            margin-bottom: 0.5rem;
-        }
-        .error-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 0.75rem;
-        }
-        .error-desc {
-            color: #6c757d;
-            margin-bottom: 2rem;
-            line-height: 1.6;
-        }
-        .btn-back {
-            display: inline-block;
-            background: #0d6efd;
-            color: #fff;
-            padding: 0.75rem 2rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: background 0.2s;
-        }
-        .btn-back:hover { background: #0b5ed7; color: #fff; }
-        .btn-home {
-            display: inline-block;
-            background: transparent;
-            color: #6c757d;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            text-decoration: none;
-            margin-left: 0.5rem;
-            border: 1px solid #dee2e6;
-        }
-        .btn-home:hover { background: #f8f9fa; color: #333; }
-        .brand {
-            margin-top: 2rem;
-            padding-top: 1.5rem;
-            border-top: 1px solid #f0f0f0;
-            font-size: 0.85rem;
-            color: #adb5bd;
-        }
-        .brand strong { color: #495057; }
+        body { min-height: 100vh; display: flex; align-items: center; justify-content: center;
+               background: linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%); font-family:'Inter',sans-serif; }
+        .error-icon { font-size: 5rem; }
+        .error-code { font-size: 7rem; font-weight: 900; color: #dc3545; line-height: 1; }
     </style>
 </head>
 <body>
-    <div class="error-box">
-        <span class="error-icon">🔒</span>
+    <div class="text-center px-4" style="max-width:500px">
+        <div class="error-icon mb-3">🚫</div>
         <div class="error-code">403</div>
-        <div class="error-title">Accès refusé</div>
-        <p class="error-desc">
+        <h2 class="fw-bold mt-2 mb-3 text-dark">Accès interdit</h2>
+        <p class="text-muted mb-4">
             Vous n'avez pas les permissions nécessaires pour accéder à cette page.
-            Veuillez contacter votre administrateur si vous pensez qu'il s'agit d'une erreur.
+            Contactez votre administrateur si vous pensez qu'il s'agit d'une erreur.
         </p>
-        <div>
-            <a href="javascript:history.back()" class="btn-back">← Retour</a>
-            <a href="/" class="btn-home">🏠 Accueil</a>
+        <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
+            <a href="<?= defined('BASE_PATH') ? BASE_PATH : '' ?>/"
+               class="btn btn-primary">
+                <i class="bi bi-house me-1"></i>Retour à l'accueil
+            </a>
+            <a href="javascript:history.back()"
+               class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Page précédente
+            </a>
         </div>
-        <div class="brand">
-            <strong>e-DAMO</strong> — ANPE Niger
+        <div class="mt-4 text-muted small">
+            Si vous êtes connecté, vérifiez que votre session est toujours active.
+            <a href="<?= defined('BASE_PATH') ? BASE_PATH : '' ?>/login">Se reconnecter</a>
         </div>
     </div>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </body>
 </html>
