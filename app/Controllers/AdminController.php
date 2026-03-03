@@ -1054,7 +1054,8 @@ class AdminController extends BaseController
     }
 
     /**
-     * Export PDF d'une déclaration (HTML → PDF via wkhtmltopdf ou HTML pur)
+     * Export Word (.docx) d'une déclaration
+     * Route : GET /admin/declaration/:id/pdf  et  /admin/declaration/:id/export-pdf
      */
     public function exportPdf(string $id): void
     {
@@ -1089,24 +1090,468 @@ class AdminController extends BaseController
         $perspective         = $this->db->fetchOne("SELECT * FROM declaration_perspectives WHERE declaration_id = $1", [(int)$id]);
         $effectifsEtrangers  = $this->db->fetchAll("SELECT * FROM declaration_effectifs_etrangers WHERE declaration_id = $1", [(int)$id]);
 
-        // Générer le HTML du PDF
-        $html = $this->generatePdfHtml(
+        // Générer le fichier Word (.docx)
+        $docxContent = $this->generateDocx(
             $declaration, $effectifsMensuels, $categoriesEffectifs,
             $niveauxInstruction, $formations, $pertesEmploi,
             $perspective, $effectifsEtrangers
         );
 
-        // En-têtes pour le téléchargement HTML (impression navigateur)
-        $filename = 'declaration_' . $declaration['code_questionnaire'] . '_' . date('Ymd') . '.html';
-        $filename = str_replace('/', '-', $filename);
-        header('Content-Type: text/html; charset=UTF-8');
+        $filename = 'declaration_' . str_replace('/', '-', $declaration['code_questionnaire']) . '_' . date('Ymd') . '.docx';
+
+        // Nettoyer tout output en attente pour éviter la corruption du fichier binaire
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
-        echo $html;
+        header('Content-Length: ' . strlen($docxContent));
+        header('Cache-Control: no-store, no-cache');
+        header('Pragma: no-cache');
+        echo $docxContent;
         exit;
     }
 
+    }
+
     /**
-     * Générer le HTML du rapport PDF
+     * Générer un fichier .docx (Open XML / WordprocessingML) sans librairie externe
+     * Compatible Microsoft Word 2007+, LibreOffice Writer, Google Docs
+     */
+    private function generateDocx(
+        array $d, array $effectifsMensuels, array $categories,
+        array $niveaux, array $formations, array $pertes,
+        ?array $perspective, array $etrangers
+    ): string {
+        // ── Helpers internes ────────────────────────────────────────────────
+        $x = fn(mixed $v): string => htmlspecialchars((string)($v ?? ''), ENT_XML1, 'UTF-8');
+        $wt = fn(string $txt): string => "<w:r><w:t xml:space=\"preserve\">" . $x($txt) . "</w:t></w:r>";
+        $wbold = fn(string $txt): string => "<w:r><w:rPr><w:b/></w:rPr><w:t xml:space=\"preserve\">" . $x($txt) . "</w:t></w:r>";
+
+        // Palette couleurs
+        $blue     = '1D4ED8';
+        $lightBg  = 'EFF6FF';
+        $headerBg = '1E40AF';
+        $white    = 'FFFFFF';
+
+        /** Paragraphe titre de section */
+        $wSection = function(string $txt) use ($x, $blue): string {
+            return "
+<w:p>
+  <w:pPr>
+    <w:pStyle w:val=\"Heading2\"/>
+    <w:spacing w:before=\"240\" w:after=\"120\"/>
+    <w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"EFF6FF\"/>
+  </w:pPr>
+  <w:r>
+    <w:rPr><w:b/><w:color w:val=\"1E40AF\"/><w:sz w:val=\"24\"/></w:rPr>
+    <w:t>" . $x($txt) . "</w:t>
+  </w:r>
+</w:p>";
+        };
+
+        /** Ligne de tableau 2 colonnes (label / valeur) */
+        $wRow2 = function(string $label, string $value, bool $header = false) use ($x, $lightBg, $headerBg, $white): string {
+            $bgLabel = $header ? $headerBg : $lightBg;
+            $colorLabel = $header ? $white : '1E40AF';
+            $bold = $header ? "<w:b/>" : "<w:b/>";
+            return "
+<w:tr>
+  <w:tc>
+    <w:tcPr>
+      <w:tcW w:w=\"3000\" w:type=\"dxa\"/>
+      <w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"$bgLabel\"/>
+      <w:tcBorders>
+        <w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+      </w:tcBorders>
+    </w:tcPr>
+    <w:p><w:pPr><w:spacing w:before=\"60\" w:after=\"60\"/></w:pPr>
+      <w:r><w:rPr>$bold<w:color w:val=\"$colorLabel\"/><w:sz w:val=\"18\"/></w:rPr><w:t>" . $x($label) . "</w:t></w:r>
+    </w:p>
+  </w:tc>
+  <w:tc>
+    <w:tcPr>
+      <w:tcW w:w=\"6000\" w:type=\"dxa\"/>
+      <w:tcBorders>
+        <w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+      </w:tcBorders>
+    </w:tcPr>
+    <w:p><w:pPr><w:spacing w:before=\"60\" w:after=\"60\"/></w:pPr>
+      <w:r><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:t xml:space=\"preserve\">" . $x($value) . "</w:t></w:r>
+    </w:p>
+  </w:tc>
+</w:tr>";
+        };
+
+        // ── Données de base ─────────────────────────────────────────────────
+        $moisLabels = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        $code     = $d['code_questionnaire'] ?? '';
+        $raison   = $d['raison_sociale'] ?? '';
+        $cnss     = $d['numero_cnss'] ?? '';
+        $region   = $d['region_nom'] ?? '';
+        $annee    = (string)($d['annee'] ?? '');
+        $statut   = statutLabel($d['statut'] ?? '');
+        $agent    = trim(($d['agent_prenom'] ?? '') . ' ' . ($d['agent_nom'] ?? ''));
+        $campagne = $d['campagne_libelle'] ?? '';
+        $branche  = $d['branche_nom'] ?? '';
+        $natent   = $d['nationalite'] ?? '';
+        $localite = $d['localite'] ?? '';
+        $masseSal = number_format((float)($d['masse_salariale'] ?? 0), 2, ',', ' ') . ' FCFA';
+        $dateSubmit = formatDate($d['date_soumission'] ?? '');
+        $now      = date('d/m/Y à H:i');
+
+        // ── Corps du document XML ────────────────────────────────────────────
+        $body = '';
+
+        // En-tête document (bandeau bleu simulé par titre)
+        $body .= "
+<w:p>
+  <w:pPr>
+    <w:pStyle w:val=\"Title\"/>
+    <w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"1D4ED8\"/>
+    <w:spacing w:before=\"120\" w:after=\"120\"/>
+  </w:pPr>
+  <w:r>
+    <w:rPr><w:b/><w:color w:val=\"FFFFFF\"/><w:sz w:val=\"32\"/></w:rPr>
+    <w:t>e-DAMO — Déclaration de la Main d'Œuvre</w:t>
+  </w:r>
+</w:p>
+<w:p>
+  <w:pPr><w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"1E40AF\"/></w:pPr>
+  <w:r>
+    <w:rPr><w:color w:val=\"DBEAFE\"/><w:sz w:val=\"20\"/></w:rPr>
+    <w:t xml:space=\"preserve\">ANPE Niger — Exercice $annee — Campagne : $campagne</w:t>
+  </w:r>
+</w:p>
+<w:p><w:pPr><w:spacing w:after=\"120\"/></w:pPr></w:p>";
+
+        // Section 0 : Résumé
+        $body .= "<w:tbl>
+<w:tblPr>
+  <w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+  <w:tblBorders>
+    <w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+  </w:tblBorders>
+</w:tblPr>";
+        $body .= $wRow2('Code questionnaire', $code, true);
+        $body .= $wRow2('Statut', $statut);
+        $body .= $wRow2('Raison sociale', $raison);
+        $body .= $wRow2('N° CNSS', $cnss);
+        $body .= $wRow2('Région', $region);
+        $body .= $wRow2('Agent', $agent);
+        $body .= $wRow2('Date soumission', $dateSubmit);
+        $body .= "</w:tbl>
+<w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+
+        // Section 1 : Identification entreprise
+        $body .= $wSection('1. Identification de l\'entreprise');
+        $body .= "<w:tbl>
+<w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+  <w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+        $body .= $wRow2('Raison sociale', $raison);
+        $body .= $wRow2('N° CNSS', $cnss);
+        $body .= $wRow2('Branche d\'activité', $branche);
+        $body .= $wRow2('Nationalité', $natent);
+        $body .= $wRow2('Localité', $localite);
+        $body .= $wRow2('Masse salariale', $masseSal);
+        $body .= $wRow2('Adresse', $d['adresse'] ?? '');
+        $body .= $wRow2('Téléphone', $d['ent_tel'] ?? '');
+        $body .= $wRow2('Email', $d['ent_email'] ?? '');
+        $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+
+        // Section 2 : Effectifs mensuels
+        $body .= $wSection('2. Effectifs mensuels');
+        if (!empty($effectifsMensuels)) {
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Mois', 'Effectif', true);
+            foreach ($effectifsMensuels as $em) {
+                $moisLabel = $moisLabels[($em['mois'] - 1)] ?? (string)$em['mois'];
+                $body .= $wRow2($moisLabel, (string)$em['effectif']);
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        } else {
+            $body .= "<w:p><w:r><w:rPr><w:i/><w:color w:val=\"6B7280\"/></w:rPr><w:t>Aucune donnée mensuelle enregistrée.</w:t></w:r></w:p>";
+        }
+
+        // Section 3 : Effectifs par catégorie
+        $body .= $wSection('3. Effectifs par catégorie professionnelle');
+        if (!empty($categories)) {
+            // En-tête du tableau multi-colonnes
+            $mkCell = function(string $txt, string $bg = 'EFF6FF', int $w = 1100) use ($x): string {
+                return "<w:tc>
+  <w:tcPr><w:tcW w:w=\"$w\" w:type=\"dxa\"/><w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"$bg\"/>
+    <w:tcBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tcBorders>
+  </w:tcPr>
+  <w:p><w:pPr><w:spacing w:before=\"40\" w:after=\"40\"/><w:jc w:val=\"center\"/></w:pPr>
+    <w:r><w:rPr><w:b/><w:sz w:val=\"16\"/><w:color w:val=\"1E40AF\"/></w:rPr><w:t>" . $x($txt) . "</w:t></w:r>
+  </w:p>
+</w:tc>";
+            };
+            $mkDataCell = function(string $txt, int $w = 1100) use ($x): string {
+                return "<w:tc>
+  <w:tcPr><w:tcW w:w=\"$w\" w:type=\"dxa\"/>
+    <w:tcBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tcBorders>
+  </w:tcPr>
+  <w:p><w:pPr><w:spacing w:before=\"40\" w:after=\"40\"/><w:jc w:val=\"center\"/></w:pPr>
+    <w:r><w:rPr><w:sz w:val=\"16\"/></w:rPr><w:t>" . $x($txt) . "</w:t></w:r>
+  </w:p>
+</w:tc>";
+            };
+
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            // Ligne d'en-tête
+            $body .= "<w:tr>";
+            $body .= $mkCell('Catégorie', '1E40AF', 2600);
+            $body .= $mkCell('Niger. H', '1E40AF', 900);
+            $body .= $mkCell('Niger. F', '1E40AF', 900);
+            $body .= $mkCell('Afric. H', '1E40AF', 900);
+            $body .= $mkCell('Afric. F', '1E40AF', 900);
+            $body .= $mkCell('Autres H', '1E40AF', 900);
+            $body .= $mkCell('Autres F', '1E40AF', 900);
+            $body .= $mkCell('Total', '1E40AF', 1000);
+            $body .= "</w:tr>";
+
+            foreach ($categories as $cat) {
+                $catLabel = CATEGORIES_PROFESSIONNELLES[$cat['categorie']] ?? $cat['categorie'];
+                $total = ($cat['nigeriens_h'] ?? 0) + ($cat['nigeriens_f'] ?? 0)
+                       + ($cat['africains_h'] ?? 0) + ($cat['africains_f'] ?? 0)
+                       + ($cat['autres_nat_h'] ?? 0) + ($cat['autres_nat_f'] ?? 0);
+                $body .= "<w:tr>";
+                $body .= $mkDataCell($catLabel, 2600);
+                $body .= $mkDataCell((string)($cat['nigeriens_h'] ?? 0));
+                $body .= $mkDataCell((string)($cat['nigeriens_f'] ?? 0));
+                $body .= $mkDataCell((string)($cat['africains_h'] ?? 0));
+                $body .= $mkDataCell((string)($cat['africains_f'] ?? 0));
+                $body .= $mkDataCell((string)($cat['autres_nat_h'] ?? 0));
+                $body .= $mkDataCell((string)($cat['autres_nat_f'] ?? 0));
+                $body .= $mkDataCell((string)$total, 1000);
+                $body .= "</w:tr>";
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 4 : Niveaux d'instruction
+        if (!empty($niveaux)) {
+            $body .= $wSection('4. Niveaux d\'instruction');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Niveau', 'Hommes / Femmes', true);
+            foreach ($niveaux as $niv) {
+                $label = NIVEAUX_INSTRUCTION[$niv['niveau']] ?? $niv['niveau'];
+                $body .= $wRow2($label, (string)($niv['effectif_h'] ?? 0) . ' H / ' . (string)($niv['effectif_f'] ?? 0) . ' F');
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 5 : Formation professionnelle
+        if (!empty($formations)) {
+            $body .= $wSection('5. Formation professionnelle');
+            $f = $formations[0];
+            $ouiNon = !empty($f['a_eu_formation']) ? 'Oui' : 'Non';
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('A eu une formation', $ouiNon);
+            $body .= $wRow2('Qualification', $f['qualification'] ?? '');
+            $body .= $wRow2('Nature formation', $f['nature_formation'] ?? '');
+            $body .= $wRow2('Durée', $f['duree_formation'] ?? '');
+            $body .= $wRow2('Effectif', ($f['effectif_h'] ?? 0) . ' H / ' . ($f['effectif_f'] ?? 0) . ' F');
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 6 : Pertes d'emploi
+        if (!empty($pertes)) {
+            $body .= $wSection('6. Pertes d\'emploi');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Motif', 'H / F', true);
+            foreach ($pertes as $p) {
+                $label = MOTIFS_PERTE_EMPLOI[$p['motif']] ?? $p['motif'];
+                $body .= $wRow2($label, ($p['effectif_h'] ?? 0) . ' H / ' . ($p['effectif_f'] ?? 0) . ' F');
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 7 : Perspectives
+        if ($perspective) {
+            $body .= $wSection('7. Perspectives d\'emploi');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Prévisions recrutements', (string)($perspective['prevision_recrutements'] ?? 0));
+            $body .= $wRow2('Prévisions licenciements', (string)($perspective['prevision_licenciements'] ?? 0));
+            $body .= $wRow2('Commentaire', $perspective['commentaire'] ?? '');
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 8 : Effectifs étrangers
+        if (!empty($etrangers)) {
+            $body .= $wSection('8. Effectifs étrangers');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Nationalité', 'H / F', true);
+            foreach ($etrangers as $et) {
+                $body .= $wRow2($et['nationalite'] ?? '', ($et['effectif_h'] ?? 0) . ' H / ' . ($et['effectif_f'] ?? 0) . ' F');
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Pied de page
+        $body .= "
+<w:p><w:pPr><w:spacing w:before=\"400\"/><w:pBdr><w:top w:val=\"single\" w:sz=\"4\" w:color=\"E5E7EB\"/></w:pBdr><w:jc w:val=\"center\"/></w:pPr>
+  <w:r><w:rPr><w:color w:val=\"6B7280\"/><w:sz w:val=\"16\"/></w:rPr>
+    <w:t xml:space=\"preserve\">Document généré le $now par e-DAMO — ANPE Niger | Réf. : " . $x($code) . "</w:t>
+  </w:r>
+</w:p>";
+
+        // ── Assemblage du document Word (Open XML) ───────────────────────────
+
+        // [Content_Types].xml
+        $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml"  ContentType="application/xml"/>
+  <Override PartName="/word/document.xml"
+    ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml"
+    ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/settings.xml"
+    ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+</Types>';
+
+        // _rels/.rels
+        $rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
+    Target="word/document.xml"/>
+</Relationships>';
+
+        // word/_rels/document.xml.rels
+        $docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"
+    Target="styles.xml"/>
+  <Relationship Id="rId2"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
+    Target="settings.xml"/>
+</Relationships>';
+
+        // word/settings.xml
+        $settings = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:defaultTabStop w:val="720"/>
+  <w:compat>
+    <w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>
+  </w:compat>
+</w:settings>';
+
+        // word/styles.xml (styles minimaux)
+        $styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+          xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:docDefaults>
+    <w:rPrDefault>
+      <w:rPr>
+        <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
+        <w:sz w:val="20"/>
+        <w:szCs w:val="20"/>
+        <w:lang w:val="fr-FR"/>
+      </w:rPr>
+    </w:rPrDefault>
+    <w:pPrDefault>
+      <w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr>
+    </w:pPrDefault>
+  </w:docDefaults>
+  <w:style w:type="paragraph" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:name w:val="Title"/>
+    <w:pPr>
+      <w:spacing w:before="0" w:after="80"/>
+      <w:shd w:val="clear" w:color="auto" w:fill="1D4ED8"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:rPr>
+      <w:b/><w:color w:val="FFFFFF"/><w:sz w:val="32"/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading2">
+    <w:name w:val="heading 2"/>
+    <w:pPr>
+      <w:spacing w:before="240" w:after="120"/>
+      <w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/>
+    </w:pPr>
+    <w:rPr>
+      <w:b/><w:color w:val="1E40AF"/><w:sz w:val="24"/>
+    </w:rPr>
+  </w:style>
+</w:styles>';
+
+        // word/document.xml
+        $document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
+            xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    ' . $body . '
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"
+               w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>';
+
+        // ── Création de l'archive ZIP (.docx) en mémoire ─────────────────────
+        $tmpFile = tempnam(sys_get_temp_dir(), 'edamo_docx_');
+        $zip = new \ZipArchive();
+        if ($zip->open($tmpFile, \ZipArchive::OVERWRITE) !== true) {
+            // Fallback HTML si ZipArchive indisponible
+            return $this->generatePdfHtml(
+                $d, $effectifsMensuels, $categories,
+                $niveaux, $formations, $pertes,
+                $perspective, $etrangers
+            );
+        }
+        $zip->addFromString('[Content_Types].xml',         $contentTypes);
+        $zip->addFromString('_rels/.rels',                  $rels);
+        $zip->addFromString('word/document.xml',            $document);
+        $zip->addFromString('word/styles.xml',              $styles);
+        $zip->addFromString('word/settings.xml',            $settings);
+        $zip->addFromString('word/_rels/document.xml.rels', $docRels);
+        $zip->close();
+
+        $content = file_get_contents($tmpFile);
+        unlink($tmpFile);
+
+        return $content;
+    }
+
+    /**
+     * Générer le HTML du rapport PDF (conservé pour référence interne)
      */
     private function generatePdfHtml(
         array $d, array $effectifsMensuels, array $categories,

@@ -1,16 +1,14 @@
 # ==============================================================================
-# e-DAMO — .htaccess RACINE (anpe_DAMO/)
+# e-DAMO — .htaccess RACINE
 # ==============================================================================
 #
-# Ce fichier redirige TOUTES les requêtes vers le dossier public/.
-# Il fonctionne sur Windows (XAMPP) et Linux (Apache) sans modification.
+# CAS 1 — XAMPP sous-dossier (htdocs/anpe_DAMO/)
+#   Ce fichier redirige vers public/ pour les requêtes applicatives.
+#   Les assets (CSS, JS, images) dans public/assets/ passent directement.
 #
-# Structure attendue :
-#   htdocs/anpe_DAMO/           ← racine du projet (ici)
-#   htdocs/anpe_DAMO/public/    ← DocumentRoot réel (assets, index.php)
-#
-# Accès : http://localhost:8085/anpe_DAMO/login
-#         http://localhost:8085/anpe_DAMO/admin/dashboard
+# CAS 2 — VPS/Plesk VirtualHost (DocumentRoot = .../public/)
+#   Ce fichier est dans le dossier parent du DocumentRoot → il n'est PAS
+#   lu par Apache pour les requêtes web normales. Laissez-le tel quel.
 # ==============================================================================
 
 Options -Indexes
@@ -19,18 +17,16 @@ ServerSignature Off
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # ── 1. Ne pas réécrire les requêtes déjà dans public/ ──────────────────────
+    # ── 0. Ne pas traiter si on est déjà dans public/ ─────────────────────────
     RewriteCond %{REQUEST_URI} ^/[^/]+/public/ [NC]
     RewriteRule ^ - [L]
 
-    # ── 2. Ne pas réécrire les fichiers/dossiers qui existent réellement ───────
+    # ── 1. Laisser passer les fichiers physiques (assets, uploads…) ────────────
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # ── 3. Tout le reste → public/index.php ────────────────────────────────────
-    #    On utilise %{REQUEST_URI} pour construire le chemin complet
-    #    Apache préserve REQUEST_URI original grâce au flag [QSA,L]
+    # ── 2. Tout le reste → public/index.php ────────────────────────────────────
     RewriteRule ^(.*)$ public/index.php [QSA,L]
 </IfModule>
 
