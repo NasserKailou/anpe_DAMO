@@ -4,6 +4,9 @@
  * ANPE Niger - Plateforme Digitale de Déclaration Annuelle de la Main d'Œuvre
  */
 
+// Guard anti-double-inclusion : si APP_NAME est déjà défini, on sort immédiatement
+if (defined('APP_NAME')) { return; }
+
 // Charger les variables d'environnement
 $envFile = dirname(__DIR__) . '/.env';
 if (file_exists($envFile)) {
@@ -76,8 +79,6 @@ define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
 
     define('BASE_PATH', $base);
 })();
-
-    define('BASE_PATH', $base);
 
 define('APP_KEY',         getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');
 define('APP_TIMEZONE',    'Africa/Niamey');
