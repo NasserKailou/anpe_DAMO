@@ -87,13 +87,13 @@ define('APP_KEY',         getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_her
 define('APP_TIMEZONE',    'Africa/Niamey');
 define('APP_LOCALE',      'fr_FR');
 
-// ===== CONFIGURATION BASE DE DONNÉES =====
+// ===== CONFIGURATION BASE DE DONNÉES (MySQL) =====
 define('DB_HOST',     getenv('DB_HOST') ?: '127.0.0.1');
-define('DB_PORT',     getenv('DB_PORT') ?: '5432');
+define('DB_PORT',     getenv('DB_PORT') ?: '3306');
 define('DB_NAME',     getenv('DB_NAME') ?: 'edamo');
-define('DB_USER',     getenv('DB_USER') ?: 'postgres');
-define('DB_PASS',     getenv('DB_PASS') ?: 'admin');
-define('DB_SCHEMA',   getenv('DB_SCHEMA') ?: 'public');
+define('DB_USER',     getenv('DB_USER') ?: 'root');
+define('DB_PASS',     getenv('DB_PASS') ?: '');
+define('DB_SCHEMA',   ''); // Non utilisé avec MySQL
 
 // ===== CONFIGURATION SESSION =====
 define('SESSION_NAME',     'EDAMO_SESSION');

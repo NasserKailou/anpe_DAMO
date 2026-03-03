@@ -102,6 +102,8 @@ Router::get('/admin/declaration/:id/exporter', ['AdminController', 'exporterDecl
 Router::get('/admin/export/declarations', ['AdminController', 'exportDeclarations'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::get('/admin/export/entreprises', ['AdminController', 'exportEntreprises'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::get('/admin/declaration/:id/pdf', ['AdminController', 'exportPdf'], ['AuthMiddleware', 'AdminMiddleware']);
+// Alias pour compatibilité avec l'URL /export-pdf utilisée dans les vues
+Router::get('/admin/declaration/:id/export-pdf', ['AdminController', 'exportPdf'], ['AuthMiddleware', 'AdminMiddleware']);
 
 // Import entreprises CSV
 Router::get('/admin/import/entreprises', ['AdminController', 'importEntreprisesForm'], ['AuthMiddleware', 'AdminMiddleware']);
@@ -124,6 +126,9 @@ Router::get('/admin/campagne/:id/modifier', ['AdminController', 'modifierCampagn
 Router::post('/admin/campagne/:id/modifier', ['AdminController', 'updateCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::post('/admin/campagne/:id/cloturer', ['AdminController', 'cloturerCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::post('/admin/campagne/:id/ouvrir', ['AdminController', 'ouvrirCampagne'], ['AuthMiddleware', 'AdminMiddleware']);
+// Support GET pour éviter les 404 Apache (le contrôleur vérifiera le CSRF en POST seulement)
+Router::get('/admin/campagne/:id/cloturer', ['AdminController', 'cloturerCampagneGet'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::get('/admin/campagne/:id/ouvrir', ['AdminController', 'ouvrirCampagneGet'], ['AuthMiddleware', 'AdminMiddleware']);
 
 // Gestion des guides
 Router::get('/admin/guides', ['AdminController', 'guides'], ['AuthMiddleware', 'AdminMiddleware']);
@@ -131,8 +136,15 @@ Router::get('/admin/guide/nouveau', ['AdminController', 'nouveauGuide'], ['AuthM
 Router::post('/admin/guide/nouveau', ['AdminController', 'uploadGuide'], ['AuthMiddleware', 'AdminMiddleware']);
 Router::post('/admin/guide/:id/supprimer', ['AdminController', 'supprimerGuide'], ['AuthMiddleware', 'AdminMiddleware']);
 
-// Gestion des branches d'activité
+// Gestion des branches d'activité — CRUD complet
 Router::get('/admin/branches', ['AdminController', 'branches'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::get('/admin/branche/nouvelle', ['AdminController', 'nouvelleBranche'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/branche/nouvelle', ['AdminController', 'creerBranche'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::get('/admin/branche/:id/modifier', ['AdminController', 'modifierBranche'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/branche/:id/modifier', ['AdminController', 'updateBranche'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/branche/:id/supprimer', ['AdminController', 'supprimerBranche'], ['AuthMiddleware', 'AdminMiddleware']);
+Router::post('/admin/branche/:id/toggle', ['AdminController', 'toggleBranche'], ['AuthMiddleware', 'AdminMiddleware']);
+// Ancienne route (compatibilité)
 Router::post('/admin/branche/sauvegarder', ['AdminController', 'sauvegarderBranche'], ['AuthMiddleware', 'AdminMiddleware']);
 
 // Paramètres système

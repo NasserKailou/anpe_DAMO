@@ -502,9 +502,9 @@ class AdminController extends BaseController
         $hash = \App\Helpers\Security::hashPassword($data['password']);
 
         $this->db->insert(
-            "INSERT INTO utilisateurs (nom, prenom, email, telephone, mot_de_passe, role, region_id, actif, email_verifie, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, TRUE, $8)",
-            [$data['nom'], $data['prenom'], $data['email'], $data['telephone'],
+            "INSERT INTO utilisateurs (uuid, nom, prenom, email, telephone, mot_de_passe, role, region_id, actif, email_verifie, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, 1, $9)",
+            [generateUuid(), $data['nom'], $data['prenom'], $data['email'], $data['telephone'],
              $hash, $data['role'], $data['region_id'], $_SESSION['user_id']]
         );
 
@@ -737,7 +737,7 @@ class AdminController extends BaseController
 
         $this->db->insert(
             "INSERT INTO campagnes_damo (annee, libelle, date_debut, date_fin, actif, description, created_by)
-             VALUES ($1, $2, $3, $4, TRUE, $5, $6)",
+             VALUES ($1, $2, $3, $4, 1, $5, $6)",
             [$annee, $libelle ?: "Déclaration Annuelle $annee", $dateDebut, $dateFin, $description, $_SESSION['user_id']]
         );
 
@@ -873,10 +873,19 @@ class AdminController extends BaseController
      */
     public function branches(): void
     {
-        $branches = $this->db->fetchAll("SELECT * FROM branches_activite ORDER BY code");
+        $branches = $this->db->fetchAll(
+            "SELECT b.*,
+                    (SELECT COUNT(*) FROM entreprises e WHERE e.branche_id = b.id) AS nb_entreprises
+             FROM branches_activite b
+             ORDER BY b.code"
+        );
         $this->render('admin.branches', [
             'pageTitle' => "Branches d'activité - " . APP_NAME,
             'branches'  => $branches,
+            'breadcrumbs' => [
+                ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                ["label" => "Branches d'activité", 'url' => false],
+            ],
         ]);
     }
 
@@ -1336,10 +1345,11 @@ HTML;
 
             try {
                 $this->db->insert(
-                    "INSERT INTO entreprises (raison_sociale, numero_cnss, telephone, email,
+                    "INSERT INTO entreprises (uuid, raison_sociale, numero_cnss, telephone, email,
                      activite_principale, nationalite, localite, region_id, actif, created_by)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)",
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10)",
                     [
+                        generateUuid(),
                         $raisonSociale,
                         $numeroCnss ?: null,
                         $telephone ?: null,
@@ -1635,5 +1645,229 @@ HTML;
             error_log('Erreur retour brouillon: ' . $e->getMessage());
             redirectWith("admin/declaration/$id", 'error', 'Erreur lors du retour en brouillon.');
         }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CAMPAGNES — FALLBACK GET (évite les 404 Apache si URL tapée directement)
+    ═══════════════════════════════════════════════════════════════ */
+
+    /**
+     * GET /admin/campagne/:id/cloturer — Redirige vers la liste avec message
+     */
+    public function cloturerCampagneGet(string $id): void
+    {
+        redirectWith('admin/campagnes', 'warning', 'Utilisez le bouton "Clôturer" sur la page des campagnes.');
+    }
+
+    /**
+     * GET /admin/campagne/:id/ouvrir — Redirige vers la liste avec message
+     */
+    public function ouvrirCampagneGet(string $id): void
+    {
+        redirectWith('admin/campagnes', 'warning', 'Utilisez le bouton "Réouvrir" sur la page des campagnes.');
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BRANCHES D'ACTIVITÉ — CRUD COMPLET
+    ═══════════════════════════════════════════════════════════════ */
+
+    /**
+     * Formulaire création d'une branche
+     * GET /admin/branche/nouvelle
+     */
+    public function nouvelleBranche(): void
+    {
+        $this->render('admin.branche_form', [
+            'pageTitle' => "Nouvelle branche d'activité - " . APP_NAME,
+            'mode'      => 'create',
+            'branche'   => null,
+            'breadcrumbs' => [
+                ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                ['label' => 'Nouvelle branche', 'url' => false],
+            ],
+        ]);
+    }
+
+    /**
+     * Créer une nouvelle branche
+     * POST /admin/branche/nouvelle
+     */
+    public function creerBranche(): void
+    {
+        $this->requireCsrf();
+        $code        = strtoupper(trim(sanitize(post('code', ''))));
+        $libelle     = sanitize(post('libelle', ''));
+        $description = sanitize(post('description', ''));
+        $actif       = post('actif', '1') === '1' ? 1 : 0;
+
+        $errors = [];
+        if (!$code)    $errors['code']    = 'Le code est obligatoire.';
+        if (!$libelle) $errors['libelle'] = 'Le libellé est obligatoire.';
+        if ($code && strlen($code) > 10) $errors['code'] = 'Le code ne doit pas dépasser 10 caractères.';
+
+        if (!empty($errors)) {
+            $this->render('admin.branche_form', [
+                'pageTitle' => "Nouvelle branche d'activité - " . APP_NAME,
+                'mode'      => 'create',
+                'branche'   => null,
+                'errors'    => $errors,
+                'old'       => compact('code', 'libelle', 'description', 'actif'),
+                'breadcrumbs' => [
+                    ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                    ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                    ['label' => 'Nouvelle branche', 'url' => false],
+                ],
+            ]);
+            return;
+        }
+
+        $exists = $this->db->fetchScalar("SELECT id FROM branches_activite WHERE code = $1", [$code]);
+        if ($exists) {
+            $this->render('admin.branche_form', [
+                'pageTitle' => "Nouvelle branche d'activité - " . APP_NAME,
+                'mode'      => 'create',
+                'branche'   => null,
+                'errors'    => ['code' => "Le code \"$code\" est déjà utilisé."],
+                'old'       => compact('code', 'libelle', 'description', 'actif'),
+                'breadcrumbs' => [
+                    ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                    ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                    ['label' => 'Nouvelle branche', 'url' => false],
+                ],
+            ]);
+            return;
+        }
+
+        $this->db->insert(
+            "INSERT INTO branches_activite (code, libelle, description, actif) VALUES ($1, $2, $3, $4)",
+            [$code, $libelle, $description ?: null, $actif]
+        );
+        logActivity('branch_created', 'branches_activite', 0, ['code' => $code, 'libelle' => $libelle]);
+        redirectWith('admin/branches', 'success', "Branche \"$libelle\" créée avec succès.");
+    }
+
+    /**
+     * Formulaire modification d'une branche
+     * GET /admin/branche/:id/modifier
+     */
+    public function modifierBranche(string $id): void
+    {
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        $this->render('admin.branche_form', [
+            'pageTitle' => "Modifier la branche - " . APP_NAME,
+            'mode'      => 'edit',
+            'branche'   => $branche,
+            'breadcrumbs' => [
+                ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                ['label' => 'Modifier', 'url' => false],
+            ],
+        ]);
+    }
+
+    /**
+     * Mettre à jour une branche
+     * POST /admin/branche/:id/modifier
+     */
+    public function updateBranche(string $id): void
+    {
+        $this->requireCsrf();
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        $code        = strtoupper(trim(sanitize(post('code', ''))));
+        $libelle     = sanitize(post('libelle', ''));
+        $description = sanitize(post('description', ''));
+        $actif       = post('actif', '1') === '1' ? 1 : 0;
+
+        $errors = [];
+        if (!$code)    $errors['code']    = 'Le code est obligatoire.';
+        if (!$libelle) $errors['libelle'] = 'Le libellé est obligatoire.';
+        if ($code && strlen($code) > 10) $errors['code'] = 'Le code ne doit pas dépasser 10 caractères.';
+
+        // Vérifier unicité code (excluant la branche elle-même)
+        $existant = $this->db->fetchScalar(
+            "SELECT id FROM branches_activite WHERE code = $1 AND id != $2",
+            [$code, (int)$id]
+        );
+        if ($existant) $errors['code'] = "Le code \"$code\" est déjà utilisé par une autre branche.";
+
+        if (!empty($errors)) {
+            $this->render('admin.branche_form', [
+                'pageTitle' => "Modifier la branche - " . APP_NAME,
+                'mode'      => 'edit',
+                'branche'   => $branche,
+                'errors'    => $errors,
+                'old'       => compact('code', 'libelle', 'description', 'actif'),
+                'breadcrumbs' => [
+                    ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                    ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                    ['label' => 'Modifier', 'url' => false],
+                ],
+            ]);
+            return;
+        }
+
+        $this->db->execute(
+            "UPDATE branches_activite SET code=$1, libelle=$2, description=$3, actif=$4 WHERE id=$5",
+            [$code, $libelle, $description ?: null, $actif, (int)$id]
+        );
+        logActivity('branch_updated', 'branches_activite', (int)$id, ['code' => $code]);
+        redirectWith('admin/branches', 'success', "Branche \"$libelle\" mise à jour.");
+    }
+
+    /**
+     * Supprimer une branche
+     * POST /admin/branche/:id/supprimer
+     */
+    public function supprimerBranche(string $id): void
+    {
+        $this->requireCsrf();
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        // Vérifier si la branche est utilisée
+        $usage = (int) $this->db->fetchScalar(
+            "SELECT COUNT(*) FROM entreprises WHERE branche_id = $1",
+            [(int)$id]
+        );
+        if ($usage > 0) {
+            redirectWith('admin/branches', 'error', "Impossible de supprimer : cette branche est utilisée par $usage entreprise(s).");
+        }
+
+        $this->db->execute("DELETE FROM branches_activite WHERE id = $1", [(int)$id]);
+        logActivity('branch_deleted', 'branches_activite', (int)$id, ['code' => $branche['code']]);
+        redirectWith('admin/branches', 'success', "Branche \"{$branche['libelle']}\" supprimée.");
+    }
+
+    /**
+     * Activer/Désactiver une branche (toggle)
+     * POST /admin/branche/:id/toggle
+     */
+    public function toggleBranche(string $id): void
+    {
+        $this->requireCsrf();
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        $newActif = $branche['actif'] ? 0 : 1;
+        $this->db->execute(
+            "UPDATE branches_activite SET actif = $1 WHERE id = $2",
+            [$newActif, (int)$id]
+        );
+        $statut = $newActif ? 'activée' : 'désactivée';
+        logActivity('branch_toggled', 'branches_activite', (int)$id, ['actif' => $newActif]);
+        redirectWith('admin/branches', 'success', "Branche \"{$branche['libelle']}\" $statut.");
     }
 }
