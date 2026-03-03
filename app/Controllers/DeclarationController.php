@@ -173,28 +173,28 @@ class DeclarationController extends BaseController
      */
     private function preRemplirDeclaration(int $decId): void
     {
-        // 12 mois
+        // 12 mois — INSERT IGNORE évite les doublons si déjà existants (MySQL)
         for ($m = 1; $m <= 12; $m++) {
             $this->db->execute(
-                "INSERT INTO declaration_effectifs_mensuels (declaration_id, mois, effectif) VALUES ($1, $2, 0)",
+                "INSERT IGNORE INTO declaration_effectifs_mensuels (declaration_id, mois, effectif) VALUES ($1, $2, 0)",
                 [$decId, $m]
             );
         }
 
         // Catégories professionnelles × origines
+        // INSERT IGNORE = équivalent MySQL de ON CONFLICT DO NOTHING
         $categories = array_keys(CATEGORIES_PROFESSIONNELLES);
         foreach ($categories as $cat) {
             $this->db->execute(
-                "INSERT INTO declaration_categories_effectifs (declaration_id, categorie) VALUES ($1, $2)
-                 ON CONFLICT DO NOTHING",
+                "INSERT IGNORE INTO declaration_categories_effectifs (declaration_id, categorie) VALUES ($1, $2)",
                 [$decId, $cat]
             );
 
             // Niveaux d'instruction pour chaque catégorie
             foreach (array_keys(NIVEAUX_INSTRUCTION) as $niveau) {
                 $this->db->execute(
-                    "INSERT INTO declaration_niveaux_instruction (declaration_id, categorie, niveau)
-                     VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                    "INSERT IGNORE INTO declaration_niveaux_instruction (declaration_id, categorie, niveau)
+                     VALUES ($1, $2, $3)",
                     [$decId, $cat, $niveau]
                 );
             }
@@ -203,21 +203,20 @@ class DeclarationController extends BaseController
         // Motifs de perte d'emploi
         foreach (array_keys(MOTIFS_PERTE_EMPLOI) as $motif) {
             $this->db->execute(
-                "INSERT INTO declaration_pertes_emploi (declaration_id, motif) VALUES ($1, $2)
-                 ON CONFLICT DO NOTHING",
+                "INSERT IGNORE INTO declaration_pertes_emploi (declaration_id, motif) VALUES ($1, $2)",
                 [$decId, $motif]
             );
         }
 
         // Perspectives
         $this->db->execute(
-            "INSERT INTO declaration_perspectives (declaration_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            "INSERT IGNORE INTO declaration_perspectives (declaration_id) VALUES ($1)",
             [$decId]
         );
 
-        // Formation (une ligne vide)
+        // Formation (une ligne vide) — FALSE → 0 pour MySQL
         $this->db->execute(
-            "INSERT INTO declaration_formations (declaration_id, a_eu_formation) VALUES ($1, FALSE)",
+            "INSERT IGNORE INTO declaration_formations (declaration_id, a_eu_formation) VALUES ($1, 0)",
             [$decId]
         );
     }
@@ -384,7 +383,7 @@ class DeclarationController extends BaseController
                                  (declaration_id, a_eu_formation, qualification, nature_formation, duree_formation,
                                   effectif_h, effectif_f, observations, ligne_ordre)
                                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                                [$decId, true, $qualification, $nature, $duree,
+                                [$decId, 1, $qualification, $nature, $duree,
                                  $effectifH, $effectifF, $observations, (int)$idx + 1]
                             );
                         }
@@ -392,7 +391,7 @@ class DeclarationController extends BaseController
                         // Insérer une ligne vide pour indiquer "Pas de formation"
                         $this->db->execute(
                             "INSERT INTO declaration_formations (declaration_id, a_eu_formation, ligne_ordre)
-                             VALUES ($1, FALSE, 1)",
+                             VALUES ($1, 0, 1)",
                             [$decId]
                         );
                     }
@@ -828,7 +827,7 @@ class DeclarationController extends BaseController
                             "INSERT INTO declaration_formations
                              (declaration_id, a_eu_formation, qualification, nature_formation, duree_formation,
                               effectif_h, effectif_f, ligne_ordre)
-                             VALUES ($1, TRUE, $2, $3, $4, $5, $6, $7)",
+                             VALUES ($1, 1, $2, $3, $4, $5, $6, $7)",
                             [$decIdInt, sanitize($r['qualification'] ?? ''),
                              sanitize($r['nature_formation'] ?? ''),
                              sanitize($r['duree_formation'] ?? ''),

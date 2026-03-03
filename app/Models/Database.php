@@ -80,6 +80,10 @@ class Database
      */
     private function normalizeSql(string $sql): string
     {
+        // ON CONFLICT DO NOTHING → supprimer la clause (les INSERT IGNORE sont écrits explicitement)
+        $sql = preg_replace('/\s+ON\s+CONFLICT\s+DO\s+NOTHING\s*/i', ' ', $sql);
+        $sql = preg_replace('/\s+ON\s+CONFLICT\s*\([^)]*\)\s+DO\s+NOTHING\s*/i', ' ', $sql);
+
         // ILIKE → LIKE (MySQL est case-insensitive par défaut)
         $sql = preg_replace('/\bILIKE\b/i', 'LIKE', $sql);
 
