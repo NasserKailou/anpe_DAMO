@@ -36,15 +36,18 @@ class PublicController extends BaseController
         );
 
         // Répartition par branche
+        // MySQL : alias SUM interdit dans ORDER BY → sous-requête
         $parBranche = $this->db->fetchAll(
-            "SELECT b.libelle AS branche, COUNT(DISTINCT d.id) AS nb_entreprises,
-                    SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois
-             FROM declarations d
-             JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
-             JOIN entreprises e ON e.id = d.entreprise_id
-             JOIN branches_activite b ON b.id = e.branche_id
-             WHERE d.statut = 'validee'
-             GROUP BY b.id, b.libelle
+            "SELECT * FROM (
+                SELECT b.libelle AS branche, COUNT(DISTINCT d.id) AS nb_entreprises,
+                       SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois
+                FROM declarations d
+                JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
+                JOIN entreprises e ON e.id = d.entreprise_id
+                JOIN branches_activite b ON b.id = e.branche_id
+                WHERE d.statut = 'validee'
+                GROUP BY b.id, b.libelle
+             ) AS sub
              ORDER BY total_emplois DESC
              LIMIT 9"
         );
@@ -100,31 +103,37 @@ class PublicController extends BaseController
         );
 
         // Effectifs par région
+        // Note MySQL : impossible de référencer un alias SUM() dans ORDER BY directement
+        // → on wrappe dans une sous-requête pour pouvoir trier sur l'alias
         $parRegion = $this->db->fetchAll(
-            "SELECT r.nom AS region,
-                    COUNT(DISTINCT d.id) AS nb_entreprises,
-                    SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois,
-                    SUM(dc.nigeriens_h + dc.africains_h + dc.autres_nat_h) AS hommes,
-                    SUM(dc.nigeriens_f + dc.africains_f + dc.autres_nat_f) AS femmes
-             FROM regions r
-             LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = $1 AND d.statut = 'validee'
-             LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
-             GROUP BY r.id, r.nom
-             ORDER BY total_emplois DESC NULLS LAST",
+            "SELECT * FROM (
+                SELECT r.nom AS region,
+                       COUNT(DISTINCT d.id) AS nb_entreprises,
+                       SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois,
+                       SUM(dc.nigeriens_h + dc.africains_h + dc.autres_nat_h) AS hommes,
+                       SUM(dc.nigeriens_f + dc.africains_f + dc.autres_nat_f) AS femmes
+                FROM regions r
+                LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = $1 AND d.statut = 'validee'
+                LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
+                GROUP BY r.id, r.nom
+             ) AS sub
+             ORDER BY (total_emplois IS NULL) ASC, total_emplois DESC",
             [$campagneId]
         );
 
         // Pertes d'emploi par motif
+        // MySQL : alias SUM interdit dans ORDER BY → sous-requête
         $pertesEmploi = $this->db->fetchAll(
-            "SELECT motif,
-                    SUM(effectif_h) AS hommes,
-                    SUM(effectif_f) AS femmes,
-                    SUM(effectif_h + effectif_f) AS total
-             FROM declaration_pertes_emploi dp
-             JOIN declarations d ON d.id = dp.declaration_id
-             WHERE d.campagne_id = $1 AND d.statut = 'validee'
-             GROUP BY motif
-             ORDER BY total DESC",
+            "SELECT * FROM (
+                SELECT motif,
+                       SUM(effectif_h) AS hommes,
+                       SUM(effectif_f) AS femmes,
+                       SUM(effectif_h + effectif_f) AS total
+                FROM declaration_pertes_emploi dp
+                JOIN declarations d ON d.id = dp.declaration_id
+                WHERE d.campagne_id = $1 AND d.statut = 'validee'
+                GROUP BY motif
+             ) AS sub ORDER BY total DESC",
             [$campagneId]
         );
 
@@ -264,9 +273,17 @@ class PublicController extends BaseController
             [(int) $id]
         );
 
-        $filePath = PUBLIC_PATH . $guide['fichier_path'];
+        $filePath = rtrim(PUBLIC_PATH, '/') . '/' . ltrim($guide['fichier_path'], '/');
         if (!file_exists($filePath)) {
+            // Fichier PDF non disponible : afficher une page d'erreur propre
             http_response_code(404);
+            echo '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Fichier non disponible</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"></head>
+<body class="bg-light d-flex align-items-center justify-content-center" style="min-height:100vh">
+<div class="text-center p-5"><h1 class="display-1 text-warning">404</h1>
+<h2>Fichier non disponible</h2>
+<p class="text-muted">Le guide "<strong>' . htmlspecialchars($guide['titre']) . '</strong>" n\'est pas encore disponible en téléchargement.</p>
+<a href="/guides" class="btn btn-primary">Retour aux guides</a></div></body></html>';
             exit;
         }
 

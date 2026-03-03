@@ -136,11 +136,13 @@ class ApiController extends BaseController
     private function getChartNiveaux(int $campagneId): array
     {
         $rows = $this->db->fetchAll(
-            "SELECT niveau, SUM(effectif_h+effectif_f) AS total
-             FROM declaration_niveaux_instruction dn
-             JOIN declarations d ON d.id = dn.declaration_id
-             WHERE d.campagne_id = $1 AND d.statut = 'validee'
-             GROUP BY niveau ORDER BY total DESC",
+            "SELECT * FROM (
+                SELECT niveau, SUM(effectif_h+effectif_f) AS total
+                FROM declaration_niveaux_instruction dn
+                JOIN declarations d ON d.id = dn.declaration_id
+                WHERE d.campagne_id = $1 AND d.statut = 'validee'
+                GROUP BY niveau
+             ) AS sub ORDER BY total DESC",
             [$campagneId]
         );
 
