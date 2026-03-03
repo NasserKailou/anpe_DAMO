@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>404 – Page introuvable | <?= defined('APP_NAME') ? APP_NAME : 'e-DAMO' ?></title>
-    <link rel="stylesheet" href="<?= defined('BASE_PATH') ? BASE_PATH : '' ?>/assets/css/bootstrap.min.css">
+    <!-- Bootstrap 5 CDN (évite blocage nginx Plesk) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
     <style>
         body { min-height: 100vh; display: flex; align-items: center; justify-content: center;
                background: linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%); font-family:'Inter',sans-serif; }

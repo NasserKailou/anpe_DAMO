@@ -249,8 +249,8 @@ class DeclarationController extends BaseController
             'entreprise'  => $data['entreprise'],
             'etape'       => $etape,
             'data'        => $data,
-            'extraCss'    => ['/assets/css/saisie.css'],
-            'extraJs'     => ['/assets/js/saisie.js'],
+            'extraCss'    => [asset('css/saisie.css')],
+            'extraJs'     => [asset('js/saisie.js')],
             'breadcrumbs' => [
                 ['label' => 'Mes déclarations', 'url' => '/agent/declarations'],
                 ['label' => 'Saisie #' . $declaration['code_questionnaire'], 'url' => false],
@@ -540,7 +540,7 @@ class DeclarationController extends BaseController
             'pageTitle'   => 'Aperçu déclaration - ' . APP_NAME,
             'declaration' => $declaration,
             'data'        => $data,
-            'extraCss'    => ['/assets/css/saisie.css'],
+            'extraCss'    => [asset('css/saisie.css')],
             'breadcrumbs' => [
                 ['label' => 'Mes déclarations', 'url' => '/agent/declarations'],
                 ['label' => 'Aperçu #' . $declaration['code_questionnaire'], 'url' => false],

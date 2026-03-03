@@ -7,13 +7,13 @@
     <title><?= e($pageTitle ?? APP_NAME) ?> — e-DAMO</title>
     <link rel="icon" type="image/png" href="<?= asset('img/favicon.ico') ?>">
 
-    <!-- Bootstrap 5 (local) -->
-    <link rel="stylesheet" href="<?= asset('css/bootstrap.min.css') ?>">
-    <!-- Bootstrap Icons (local) -->
-    <link rel="stylesheet" href="<?= asset('css/bootstrap-icons.min.css') ?>">
+    <!-- Bootstrap 5 — CDN (évite blocage nginx Plesk) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
+    <!-- Bootstrap Icons — CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- CSS -->
+    <!-- CSS custom (via route PHP /a/ pour contourner nginx Plesk) -->
     <link rel="stylesheet" href="<?= asset('css/main.css') ?>">
     <link rel="stylesheet" href="<?= asset('css/public.css') ?>">
 </head>
@@ -164,9 +164,9 @@ $_currentPath = '/' . ltrim($_currentPath, '/');
     </div>
 </footer>
 
-<!-- Scripts (locaux) -->
-<script src="<?= asset('js/bootstrap.bundle.min.js') ?>"></script>
-<script src="<?= asset('js/chart.umd.min.js') ?>"></script>
+<!-- Scripts — Bootstrap CDN + libs CDN + custom via route PHP -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" crossorigin="anonymous"></script>
 <script>
 window.APP_BASE = '<?= defined('BASE_PATH') ? BASE_PATH : '' ?>';
 window.APP_URL  = '<?= APP_URL ?>';
