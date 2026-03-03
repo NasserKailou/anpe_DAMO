@@ -36,15 +36,18 @@ class PublicController extends BaseController
         );
 
         // Répartition par branche
+        // MySQL : alias SUM interdit dans ORDER BY → sous-requête
         $parBranche = $this->db->fetchAll(
-            "SELECT b.libelle AS branche, COUNT(DISTINCT d.id) AS nb_entreprises,
-                    SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois
-             FROM declarations d
-             JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
-             JOIN entreprises e ON e.id = d.entreprise_id
-             JOIN branches_activite b ON b.id = e.branche_id
-             WHERE d.statut = 'validee'
-             GROUP BY b.id, b.libelle
+            "SELECT * FROM (
+                SELECT b.libelle AS branche, COUNT(DISTINCT d.id) AS nb_entreprises,
+                       SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois
+                FROM declarations d
+                JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
+                JOIN entreprises e ON e.id = d.entreprise_id
+                JOIN branches_activite b ON b.id = e.branche_id
+                WHERE d.statut = 'validee'
+                GROUP BY b.id, b.libelle
+             ) AS sub
              ORDER BY total_emplois DESC
              LIMIT 9"
         );
@@ -100,31 +103,37 @@ class PublicController extends BaseController
         );
 
         // Effectifs par région
+        // Note MySQL : impossible de référencer un alias SUM() dans ORDER BY directement
+        // → on wrappe dans une sous-requête pour pouvoir trier sur l'alias
         $parRegion = $this->db->fetchAll(
-            "SELECT r.nom AS region,
-                    COUNT(DISTINCT d.id) AS nb_entreprises,
-                    SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois,
-                    SUM(dc.nigeriens_h + dc.africains_h + dc.autres_nat_h) AS hommes,
-                    SUM(dc.nigeriens_f + dc.africains_f + dc.autres_nat_f) AS femmes
-             FROM regions r
-             LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = $1 AND d.statut = 'validee'
-             LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
-             GROUP BY r.id, r.nom
+            "SELECT * FROM (
+                SELECT r.nom AS region,
+                       COUNT(DISTINCT d.id) AS nb_entreprises,
+                       SUM(dc.nigeriens_h + dc.nigeriens_f + dc.africains_h + dc.africains_f + dc.autres_nat_h + dc.autres_nat_f) AS total_emplois,
+                       SUM(dc.nigeriens_h + dc.africains_h + dc.autres_nat_h) AS hommes,
+                       SUM(dc.nigeriens_f + dc.africains_f + dc.autres_nat_f) AS femmes
+                FROM regions r
+                LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = $1 AND d.statut = 'validee'
+                LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
+                GROUP BY r.id, r.nom
+             ) AS sub
              ORDER BY (total_emplois IS NULL) ASC, total_emplois DESC",
             [$campagneId]
         );
 
         // Pertes d'emploi par motif
+        // MySQL : alias SUM interdit dans ORDER BY → sous-requête
         $pertesEmploi = $this->db->fetchAll(
-            "SELECT motif,
-                    SUM(effectif_h) AS hommes,
-                    SUM(effectif_f) AS femmes,
-                    SUM(effectif_h + effectif_f) AS total
-             FROM declaration_pertes_emploi dp
-             JOIN declarations d ON d.id = dp.declaration_id
-             WHERE d.campagne_id = $1 AND d.statut = 'validee'
-             GROUP BY motif
-             ORDER BY total DESC",
+            "SELECT * FROM (
+                SELECT motif,
+                       SUM(effectif_h) AS hommes,
+                       SUM(effectif_f) AS femmes,
+                       SUM(effectif_h + effectif_f) AS total
+                FROM declaration_pertes_emploi dp
+                JOIN declarations d ON d.id = dp.declaration_id
+                WHERE d.campagne_id = $1 AND d.statut = 'validee'
+                GROUP BY motif
+             ) AS sub ORDER BY total DESC",
             [$campagneId]
         );
 

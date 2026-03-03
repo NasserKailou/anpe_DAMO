@@ -29,14 +29,17 @@ class AdminController extends BaseController
         ];
 
         // Déclarations par région (campagne courante)
+        // MySQL : alias COUNT interdit dans ORDER BY → sous-requête
         $parRegion = $this->db->fetchAll(
-            "SELECT r.nom, COUNT(d.id) AS total,
-                    SUM(CASE WHEN d.statut = 'validee' THEN 1 ELSE 0 END) AS validees,
-                    SUM(CASE WHEN d.statut = 'soumise' THEN 1 ELSE 0 END) AS soumises,
-                    SUM(CASE WHEN d.statut = 'brouillon' THEN 1 ELSE 0 END) AS brouillons
-             FROM regions r
-             LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = $1
-             GROUP BY r.id, r.nom
+            "SELECT * FROM (
+                SELECT r.nom, COUNT(d.id) AS total,
+                       SUM(CASE WHEN d.statut = 'validee'  THEN 1 ELSE 0 END) AS validees,
+                       SUM(CASE WHEN d.statut = 'soumise'  THEN 1 ELSE 0 END) AS soumises,
+                       SUM(CASE WHEN d.statut = 'brouillon' THEN 1 ELSE 0 END) AS brouillons
+                FROM regions r
+                LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = \$1
+                GROUP BY r.id, r.nom
+             ) AS sub
              ORDER BY total DESC",
             [$campagne['id'] ?? 0]
         );
@@ -620,15 +623,18 @@ class AdminController extends BaseController
         $campagneId = $campagne['id'] ?? 0;
 
         // Effectifs par catégorie (total global)
+        // MySQL : alias SUM interdit dans ORDER BY → sous-requête
         $effectifsParCategorie = $this->db->fetchAll(
-            "SELECT categorie,
-                    SUM(nigeriens_h + nigeriens_f + africains_h + africains_f + autres_nat_h + autres_nat_f) AS total,
-                    SUM(nigeriens_h + africains_h + autres_nat_h) AS hommes,
-                    SUM(nigeriens_f + africains_f + autres_nat_f) AS femmes
-             FROM declaration_categories_effectifs dc
-             JOIN declarations d ON d.id = dc.declaration_id
-             WHERE d.campagne_id = \$1 AND d.statut = 'validee'
-             GROUP BY categorie
+            "SELECT * FROM (
+                SELECT categorie,
+                       SUM(nigeriens_h + nigeriens_f + africains_h + africains_f + autres_nat_h + autres_nat_f) AS total,
+                       SUM(nigeriens_h + africains_h + autres_nat_h) AS hommes,
+                       SUM(nigeriens_f + africains_f + autres_nat_f) AS femmes
+                FROM declaration_categories_effectifs dc
+                JOIN declarations d ON d.id = dc.declaration_id
+                WHERE d.campagne_id = \$1 AND d.statut = 'validee'
+                GROUP BY categorie
+             ) AS sub
              ORDER BY total DESC",
             [$campagneId]
         );
@@ -653,15 +659,18 @@ class AdminController extends BaseController
         );
 
         // Top entreprises par effectifs
+        // MySQL : alias SUM interdit dans ORDER BY → sous-requête
         $topEntreprises = $this->db->fetchAll(
-            "SELECT e.raison_sociale, r.nom AS region,
-                    COALESCE(SUM(dc.nigeriens_h+dc.nigeriens_f+dc.africains_h+dc.africains_f+dc.autres_nat_h+dc.autres_nat_f), 0) AS emplois
-             FROM declarations d
-             JOIN entreprises e ON e.id = d.entreprise_id
-             JOIN regions r ON r.id = d.region_id
-             LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
-             WHERE d.campagne_id = \$1 AND d.statut = 'validee'
-             GROUP BY e.id, e.raison_sociale, r.nom
+            "SELECT * FROM (
+                SELECT e.raison_sociale, r.nom AS region,
+                       COALESCE(SUM(dc.nigeriens_h+dc.nigeriens_f+dc.africains_h+dc.africains_f+dc.autres_nat_h+dc.autres_nat_f), 0) AS emplois
+                FROM declarations d
+                JOIN entreprises e ON e.id = d.entreprise_id
+                JOIN regions r ON r.id = d.region_id
+                LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
+                WHERE d.campagne_id = \$1 AND d.statut = 'validee'
+                GROUP BY e.id, e.raison_sociale, r.nom
+             ) AS sub
              ORDER BY emplois DESC LIMIT 10",
             [$campagneId]
         );
