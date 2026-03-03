@@ -1,6 +1,6 @@
 <?php
 /**
- * e-DAMO - Configuration principale
+ * e-DAMO - Configuration principale (branche main — PostgreSQL)
  * ANPE Niger - Plateforme Digitale de Déclaration Annuelle de la Main d'Œuvre
  *
  * Guard anti-double-inclusion : si APP_NAME est déjà défini, on sort immédiatement.
@@ -10,7 +10,7 @@ if (defined('APP_NAME')) {
     return; // Déjà chargé, rien à faire
 }
 
-// Charger les variables d'environnement
+// Charger les variables d'environnement depuis .env
 $envFile = dirname(__DIR__) . '/.env';
 if (file_exists($envFile)) {
     $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -22,75 +22,77 @@ if (file_exists($envFile)) {
         $value = trim($value, " \t\n\r\0\x0B\"'");
         if (!array_key_exists($key, $_SERVER) && !array_key_exists($key, $_ENV)) {
             putenv("$key=$value");
-            $_ENV[$key] = $value;
+            $_ENV[$key]    = $value;
             $_SERVER[$key] = $value;
         }
     }
 }
 
 // ===== CONFIGURATION APPLICATION =====
-define('APP_NAME',        'e-DAMO');
-define('APP_FULL_NAME',   'Plateforme Digitale de Déclaration Annuelle de la Main d\'Œuvre');
-define('APP_VERSION',     '1.0.0');
-define('APP_ENV',         getenv('APP_ENV') ?: 'production');
-define('APP_DEBUG',       filter_var(getenv('APP_DEBUG') ?: false, FILTER_VALIDATE_BOOLEAN));
-define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
+define('APP_NAME',      'e-DAMO');
+define('APP_FULL_NAME', 'Plateforme Digitale de Déclaration Annuelle de la Main d\'Œuvre');
+define('APP_VERSION',   '1.0.0');
+define('APP_ENV',       getenv('APP_ENV') ?: 'production');
+define('APP_DEBUG',     filter_var(getenv('APP_DEBUG') ?: false, FILTER_VALIDATE_BOOLEAN));
+define('APP_URL',       getenv('APP_URL') ?: 'http://localhost');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BASE_PATH — détection automatique, universelle
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // CAS 1 — XAMPP sous-dossier (htdocs/anpe_DAMO/)
-//   URL : http://localhost:8085/anpe_DAMO/login
+//   URL : http://localhost/anpe_DAMO/login
 //   SCRIPT_NAME : /anpe_DAMO/index.php  OU  /anpe_DAMO/public/index.php
 //   → BASE_PATH : /anpe_DAMO
 //
 // CAS 2 — VPS/Plesk VirtualHost (DocumentRoot = .../anpe_DAMO/public)
-//   URL : https://affectionate-lumiere.217-154-60-93.plesk.page/login
+//   URL : https://mondomaine.example.com/login
 //   SCRIPT_NAME : /index.php
 //   → BASE_PATH : ''
 //
 // Forçage possible via variable d'environnement APP_BASE_PATH dans .env
 // ─────────────────────────────────────────────────────────────────────────────
-if (!defined('BASE_PATH')) {
-    // Permettre un override manuel via .env (ex: APP_BASE_PATH=/anpe_DAMO)
+(function () {
     $forced = getenv('APP_BASE_PATH');
-    if ($forced !== false && $forced !== '') {
+    if ($forced !== false) {
         define('BASE_PATH', rtrim($forced, '/'));
-    } else {
-        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
-
-        // ── Étape 1 : répertoire de index.php
-        $scriptDir = rtrim(dirname($scriptName), '/\\');
-        if ($scriptDir === '.' || $scriptDir === '') $scriptDir = '';
-
-        // ── Étape 2 : enlever le segment '/public' final si présent
-        //    /anpe_DAMO/public → /anpe_DAMO
-        //    /public           → ''
-        if ($scriptDir === '/public' || str_ends_with($scriptDir, '/public')) {
-            $scriptDir = rtrim(substr($scriptDir, 0, -strlen('/public')), '/\\');
-        }
-
-        $base = rtrim($scriptDir, '/');
-
-        // Sanity check : doit être '' ou commencer par '/'
-        if ($base !== '' && !str_starts_with($base, '/')) {
-            $base = '';
-        }
-
-        define('BASE_PATH', $base);
+        return;
     }
-}
-if (!defined('APP_KEY'))      define('APP_KEY',      getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');define('APP_TIMEZONE',    'Africa/Niamey');
-define('APP_LOCALE',      'fr_FR');
 
-// ===== CONFIGURATION BASE DE DONNÉES (MySQL) =====
-define('DB_HOST',     getenv('DB_HOST') ?: '127.0.0.1');
-define('DB_PORT',     getenv('DB_PORT') ?: '3306');
-define('DB_NAME',     getenv('DB_NAME') ?: 'edamo');
-define('DB_USER',     getenv('DB_USER') ?: 'root');
-define('DB_PASS',     getenv('DB_PASS') ?: '');
-define('DB_SCHEMA',   ''); // Non utilisé avec MySQL
+    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
+
+    // Étape 1 : répertoire de index.php
+    $scriptDir = rtrim(dirname($scriptName), '/\\');
+    if ($scriptDir === '.' || $scriptDir === '') $scriptDir = '';
+
+    // Étape 2 : enlever le segment '/public' final si présent
+    //    /anpe_DAMO/public → /anpe_DAMO
+    //    /public           → ''
+    if ($scriptDir === '/public' || str_ends_with($scriptDir, '/public')) {
+        $scriptDir = rtrim(substr($scriptDir, 0, -strlen('/public')), '/\\');
+    }
+
+    $base = rtrim($scriptDir, '/');
+
+    // Sanity check : doit être '' ou commencer par '/'
+    if ($base !== '' && !str_starts_with($base, '/')) {
+        $base = '';
+    }
+
+    define('BASE_PATH', $base);
+})();
+
+define('APP_KEY',      getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');
+define('APP_TIMEZONE', 'Africa/Niamey');
+define('APP_LOCALE',   'fr_FR');
+
+// ===== CONFIGURATION BASE DE DONNÉES (PostgreSQL) =====
+define('DB_HOST',   getenv('DB_HOST')   ?: '127.0.0.1');
+define('DB_PORT',   getenv('DB_PORT')   ?: '5432');
+define('DB_NAME',   getenv('DB_NAME')   ?: 'edamo');
+define('DB_USER',   getenv('DB_USER')   ?: 'postgres');
+define('DB_PASS',   getenv('DB_PASS')   ?: 'admin');
+define('DB_SCHEMA', getenv('DB_SCHEMA') ?: 'public');
 
 // ===== CONFIGURATION SESSION =====
 define('SESSION_NAME',     'EDAMO_SESSION');
@@ -177,11 +179,11 @@ define('MOTIFS_PERTE_EMPLOI', [
 ]);
 
 // ===== STATUTS DÉCLARATION =====
-define('STATUT_BROUILLON',  'brouillon');
-define('STATUT_SOUMISE',    'soumise');
-define('STATUT_VALIDEE',    'validee');
-define('STATUT_REJETEE',    'rejetee');
-define('STATUT_CORRIGEE',   'corrigee');
+define('STATUT_BROUILLON', 'brouillon');
+define('STATUT_SOUMISE',   'soumise');
+define('STATUT_VALIDEE',   'validee');
+define('STATUT_REJETEE',   'rejetee');
+define('STATUT_CORRIGEE',  'corrigee');
 
 // ===== RÔLES UTILISATEURS =====
 define('ROLE_SUPER_ADMIN', 'super_admin');
@@ -209,5 +211,5 @@ define('MAIL_USERNAME',  getenv('MAIL_USERNAME')   ?: '');
 define('MAIL_PASSWORD',  getenv('MAIL_PASSWORD')   ?: '');
 define('MAIL_FROM',      getenv('MAIL_FROM')       ?: 'noreply@anpe-niger.ne');
 define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME')  ?: 'e-DAMO ANPE Niger');
-define('MAIL_ENCRYPTION','tls');   // tls ou ssl
+define('MAIL_ENCRYPTION','tls');
 define('MAIL_ENABLED',   !empty(getenv('MAIL_PASSWORD')));
