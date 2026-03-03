@@ -7,6 +7,12 @@ defined('EDAMO') or die('Accès direct interdit');
 use App\Helpers\Router;
 
 // ============================================================
+// ASSETS via PHP (contourne nginx Plesk HTTP 428)
+// Route : /a/:type/:file  ex: /a/css/main.css  /a/js/main.js
+// ============================================================
+Router::get('/a/:type/:file', ['AssetController', 'serve']);
+
+// ============================================================
 // ROUTES PUBLIQUES (Grand public)
 // ============================================================
 

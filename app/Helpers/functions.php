@@ -19,12 +19,28 @@ function url(string $path = ''): string
 
 /**
  * Retourne l'URL d'un asset statique (CSS, JS, images)
- * asset('css/main.css') → /anpe_DAMO/assets/css/main.css
+ *
+ * Sur VPS/Plesk : nginx bloque les fichiers statiques (HTTP 428).
+ * On passe par la route PHP /a/{type}/{file} qui sert le fichier via readfile().
+ *
+ * asset('css/main.css')       → /a/css/main.css
+ * asset('js/main.js')         → /a/js/main.js
+ * asset('img/logo-anpe.png')  → /a/img/logo-anpe.png
+ * asset('fonts/x.woff2')      → /a/fonts/x.woff2
  */
 function asset(string $path): string
 {
     $base = defined('BASE_PATH') ? BASE_PATH : '';
     $path = ltrim($path, '/');
+
+    // Décomposer type/fichier
+    $parts = explode('/', $path, 2);
+    if (count($parts) === 2) {
+        // Passer par la route PHP /a/{type}/{file}
+        return $base . '/a/' . $parts[0] . '/' . $parts[1];
+    }
+
+    // Fallback direct (fichiers à la racine des assets)
     return $base . '/assets/' . $path;
 }
 

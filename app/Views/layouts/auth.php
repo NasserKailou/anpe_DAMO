@@ -7,10 +7,10 @@
     <meta name="description" content="Plateforme de Déclaration Annuelle de la Main d'Œuvre — ANPE Niger">
     <link rel="icon" href="<?= asset('img/logo-anpe.svg') ?>" type="image/svg+xml">
 
-    <!-- Bootstrap 5 (local) -->
-    <link rel="stylesheet" href="<?= asset('css/bootstrap.min.css') ?>">
-    <!-- Bootstrap Icons (local) -->
-    <link rel="stylesheet" href="<?= asset('css/bootstrap-icons.min.css') ?>">
+    <!-- Bootstrap 5 — CDN (évite blocage nginx Plesk) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" crossorigin="anonymous">
+    <!-- Bootstrap Icons — CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
@@ -538,8 +538,8 @@
     Plateforme Digitale de Déclaration Annuelle de la Main d'Œuvre
 </footer>
 
-<!-- Bootstrap JS (local) -->
-<script src="<?= asset('js/bootstrap.bundle.min.js') ?>"></script>
+<!-- Bootstrap JS — CDN (évite blocage nginx Plesk) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 
 <script>
 // ── Toggle affichage mot de passe ──
