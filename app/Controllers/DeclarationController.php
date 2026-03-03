@@ -149,10 +149,11 @@ class DeclarationController extends BaseController
         $codeQuestion = sprintf('%s/%02d/%03d', $codeRegion, 1, $nextNum);
 
         $decId = $this->db->insert(
-            "INSERT INTO declarations (code_questionnaire, campagne_id, entreprise_id, agent_id, region_id,
+            "INSERT INTO declarations (uuid, code_questionnaire, campagne_id, entreprise_id, agent_id, region_id,
              nom_enqueteur, statut, etape_courante, ip_saisie)
-             VALUES ($1, $2, $3, $4, $5, $6, 'brouillon', 1, $7)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'brouillon', 1, $8)",
             [
+                generateUuid(),
                 $codeQuestion, $campagne['id'], $entrepriseId, $user['id'],
                 $user['region_id'],
                 ($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''),

@@ -189,11 +189,12 @@ class AgentController extends BaseController
         }
 
         $this->db->insert(
-            "INSERT INTO entreprises (raison_sociale, nationalite, activite_principale, activites_secondaires,
+            "INSERT INTO entreprises (uuid, raison_sociale, nationalite, activite_principale, activites_secondaires,
              branche_id, region_id, departement_id, commune_id, localite, quartier, boite_postale,
              telephone, fax, email, numero_cnss, agent_id, actif, created_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,$17)",
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,1,$18)",
             [
+                generateUuid(),
                 $raisonSociale,
                 sanitize(post('nationalite', 'Nigérienne')),
                 sanitize(post('activite_principale', '')),
@@ -394,10 +395,11 @@ class AgentController extends BaseController
 
             try {
                 $this->db->insert(
-                    "INSERT INTO entreprises (raison_sociale, numero_cnss, telephone, email,
+                    "INSERT INTO entreprises (uuid, raison_sociale, numero_cnss, telephone, email,
                      activite_principale, nationalite, localite, region_id, actif, created_by)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)",
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10)",
                     [
+                        generateUuid(),
                         $raisonSociale,
                         $numeroCnss ?: null,
                         $telephone ?: null,

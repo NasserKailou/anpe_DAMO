@@ -31,55 +31,51 @@ define('APP_DEBUG',       filter_var(getenv('APP_DEBUG') ?: false, FILTER_VALIDA
 define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BASE_PATH — détection automatique, universelle (Windows XAMPP + Linux Apache)
+// BASE_PATH — détection automatique, universelle
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Algorithme : on compare SCRIPT_NAME et REQUEST_URI pour extraire le préfixe
-// commun.  C'est la méthode la plus robuste quelle que soit la configuration
-// Apache (sous-dossier, VirtualHost, Alias, RewriteBase, etc.).
+// CAS 1 — XAMPP sous-dossier (htdocs/anpe_DAMO/)
+//   URL : http://localhost:8085/anpe_DAMO/login
+//   SCRIPT_NAME : /anpe_DAMO/public/index.php
+//   → BASE_PATH : /anpe_DAMO
 //
-// ┌─────────────────────────────────────────────────────────────────────────┐
-// │ CAS 1 — XAMPP sous-dossier (htdocs/anpe_DAMO/)                         │
-// │  URL         : http://localhost:8085/anpe_DAMO/login                   │
-// │  SCRIPT_NAME : /anpe_DAMO/public/index.php                             │
-// │  REQUEST_URI : /anpe_DAMO/public/login   (après réécriture .htaccess)  │
-// │  → BASE_PATH : /anpe_DAMO                                              │
-// ├─────────────────────────────────────────────────────────────────────────┤
-// │ CAS 2 — VirtualHost dédié (DocumentRoot = .../anpe_DAMO/public)        │
-// │  URL         : https://edamo.anpe-niger.ne/login                       │
-// │  SCRIPT_NAME : /index.php                                              │
-// │  REQUEST_URI : /login                                                  │
-// │  → BASE_PATH : ''                                                      │
-// └─────────────────────────────────────────────────────────────────────────┘
+// CAS 2 — VPS/Plesk VirtualHost (DocumentRoot = .../anpe_DAMO/public)
+//   URL : https://mondomaine.example.com/login
+//   SCRIPT_NAME : /index.php
+//   → BASE_PATH : ''
+//
+// Forçage possible via variable d'environnement APP_BASE_PATH dans .env
+// ─────────────────────────────────────────────────────────────────────────────
 (function () {
+    // Permettre un override manuel via .env (ex: APP_BASE_PATH=/anpe_DAMO)
+    $forced = getenv('APP_BASE_PATH');
+    if ($forced !== false) {
+        define('BASE_PATH', rtrim($forced, '/'));
+        return;
+    }
+
     $scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
-    $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
     // ── Étape 1 : répertoire de index.php
-    //    ex:  /anpe_DAMO/public/index.php  →  /anpe_DAMO/public
-    //         /index.php                  →  ''  (dirname renvoie '/')
     $scriptDir = rtrim(dirname($scriptName), '/\\');
-    if ($scriptDir === '.') $scriptDir = '';
+    if ($scriptDir === '.' || $scriptDir === '') $scriptDir = '';
 
-    // ── Étape 2 : enlever le segment '/public' si présent
-    //    ex:  /anpe_DAMO/public  →  /anpe_DAMO
-    //         /public            →  ''
+    // ── Étape 2 : enlever le segment '/public' final si présent
+    //    /anpe_DAMO/public → /anpe_DAMO
+    //    /public           → ''
     if ($scriptDir === '/public' || str_ends_with($scriptDir, '/public')) {
         $scriptDir = rtrim(substr($scriptDir, 0, -strlen('/public')), '/\\');
     }
 
-    // ── Étape 3 : si SCRIPT_NAME commence par REQUEST_URI c'est un VirtualHost
-    //    (les deux ont le même préfixe nul) → BASE_PATH = ''
-    //    Sinon BASE_PATH = $scriptDir (qui peut être '/anpe_DAMO')
-    $base = $scriptDir;
-
-    // Normalisation finale : jamais de slash terminal
-    $base = rtrim($base, '/');
+    $base = rtrim($scriptDir, '/');
 
     // Sanity check : doit être '' ou commencer par '/'
     if ($base !== '' && !str_starts_with($base, '/')) {
         $base = '';
     }
+
+    define('BASE_PATH', $base);
+})();
 
     define('BASE_PATH', $base);
 })();

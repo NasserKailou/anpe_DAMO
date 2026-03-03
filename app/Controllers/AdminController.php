@@ -502,9 +502,9 @@ class AdminController extends BaseController
         $hash = \App\Helpers\Security::hashPassword($data['password']);
 
         $this->db->insert(
-            "INSERT INTO utilisateurs (nom, prenom, email, telephone, mot_de_passe, role, region_id, actif, email_verifie, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, TRUE, $8)",
-            [$data['nom'], $data['prenom'], $data['email'], $data['telephone'],
+            "INSERT INTO utilisateurs (uuid, nom, prenom, email, telephone, mot_de_passe, role, region_id, actif, email_verifie, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, 1, $9)",
+            [generateUuid(), $data['nom'], $data['prenom'], $data['email'], $data['telephone'],
              $hash, $data['role'], $data['region_id'], $_SESSION['user_id']]
         );
 
@@ -737,7 +737,7 @@ class AdminController extends BaseController
 
         $this->db->insert(
             "INSERT INTO campagnes_damo (annee, libelle, date_debut, date_fin, actif, description, created_by)
-             VALUES ($1, $2, $3, $4, TRUE, $5, $6)",
+             VALUES ($1, $2, $3, $4, 1, $5, $6)",
             [$annee, $libelle ?: "Déclaration Annuelle $annee", $dateDebut, $dateFin, $description, $_SESSION['user_id']]
         );
 
@@ -873,10 +873,19 @@ class AdminController extends BaseController
      */
     public function branches(): void
     {
-        $branches = $this->db->fetchAll("SELECT * FROM branches_activite ORDER BY code");
+        $branches = $this->db->fetchAll(
+            "SELECT b.*,
+                    (SELECT COUNT(*) FROM entreprises e WHERE e.branche_id = b.id) AS nb_entreprises
+             FROM branches_activite b
+             ORDER BY b.code"
+        );
         $this->render('admin.branches', [
             'pageTitle' => "Branches d'activité - " . APP_NAME,
             'branches'  => $branches,
+            'breadcrumbs' => [
+                ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                ["label" => "Branches d'activité", 'url' => false],
+            ],
         ]);
     }
 
@@ -1045,7 +1054,8 @@ class AdminController extends BaseController
     }
 
     /**
-     * Export PDF d'une déclaration (HTML → PDF via wkhtmltopdf ou HTML pur)
+     * Export Word (.docx) d'une déclaration
+     * Route : GET /admin/declaration/:id/pdf  et  /admin/declaration/:id/export-pdf
      */
     public function exportPdf(string $id): void
     {
@@ -1080,24 +1090,468 @@ class AdminController extends BaseController
         $perspective         = $this->db->fetchOne("SELECT * FROM declaration_perspectives WHERE declaration_id = $1", [(int)$id]);
         $effectifsEtrangers  = $this->db->fetchAll("SELECT * FROM declaration_effectifs_etrangers WHERE declaration_id = $1", [(int)$id]);
 
-        // Générer le HTML du PDF
-        $html = $this->generatePdfHtml(
+        // Générer le fichier Word (.docx)
+        $docxContent = $this->generateDocx(
             $declaration, $effectifsMensuels, $categoriesEffectifs,
             $niveauxInstruction, $formations, $pertesEmploi,
             $perspective, $effectifsEtrangers
         );
 
-        // En-têtes pour le téléchargement HTML (impression navigateur)
-        $filename = 'declaration_' . $declaration['code_questionnaire'] . '_' . date('Ymd') . '.html';
-        $filename = str_replace('/', '-', $filename);
-        header('Content-Type: text/html; charset=UTF-8');
+        $filename = 'declaration_' . str_replace('/', '-', $declaration['code_questionnaire']) . '_' . date('Ymd') . '.docx';
+
+        // Nettoyer tout output en attente pour éviter la corruption du fichier binaire
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
-        echo $html;
+        header('Content-Length: ' . strlen($docxContent));
+        header('Cache-Control: no-store, no-cache');
+        header('Pragma: no-cache');
+        echo $docxContent;
         exit;
     }
 
+    }
+
     /**
-     * Générer le HTML du rapport PDF
+     * Générer un fichier .docx (Open XML / WordprocessingML) sans librairie externe
+     * Compatible Microsoft Word 2007+, LibreOffice Writer, Google Docs
+     */
+    private function generateDocx(
+        array $d, array $effectifsMensuels, array $categories,
+        array $niveaux, array $formations, array $pertes,
+        ?array $perspective, array $etrangers
+    ): string {
+        // ── Helpers internes ────────────────────────────────────────────────
+        $x = fn(mixed $v): string => htmlspecialchars((string)($v ?? ''), ENT_XML1, 'UTF-8');
+        $wt = fn(string $txt): string => "<w:r><w:t xml:space=\"preserve\">" . $x($txt) . "</w:t></w:r>";
+        $wbold = fn(string $txt): string => "<w:r><w:rPr><w:b/></w:rPr><w:t xml:space=\"preserve\">" . $x($txt) . "</w:t></w:r>";
+
+        // Palette couleurs
+        $blue     = '1D4ED8';
+        $lightBg  = 'EFF6FF';
+        $headerBg = '1E40AF';
+        $white    = 'FFFFFF';
+
+        /** Paragraphe titre de section */
+        $wSection = function(string $txt) use ($x, $blue): string {
+            return "
+<w:p>
+  <w:pPr>
+    <w:pStyle w:val=\"Heading2\"/>
+    <w:spacing w:before=\"240\" w:after=\"120\"/>
+    <w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"EFF6FF\"/>
+  </w:pPr>
+  <w:r>
+    <w:rPr><w:b/><w:color w:val=\"1E40AF\"/><w:sz w:val=\"24\"/></w:rPr>
+    <w:t>" . $x($txt) . "</w:t>
+  </w:r>
+</w:p>";
+        };
+
+        /** Ligne de tableau 2 colonnes (label / valeur) */
+        $wRow2 = function(string $label, string $value, bool $header = false) use ($x, $lightBg, $headerBg, $white): string {
+            $bgLabel = $header ? $headerBg : $lightBg;
+            $colorLabel = $header ? $white : '1E40AF';
+            $bold = $header ? "<w:b/>" : "<w:b/>";
+            return "
+<w:tr>
+  <w:tc>
+    <w:tcPr>
+      <w:tcW w:w=\"3000\" w:type=\"dxa\"/>
+      <w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"$bgLabel\"/>
+      <w:tcBorders>
+        <w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+      </w:tcBorders>
+    </w:tcPr>
+    <w:p><w:pPr><w:spacing w:before=\"60\" w:after=\"60\"/></w:pPr>
+      <w:r><w:rPr>$bold<w:color w:val=\"$colorLabel\"/><w:sz w:val=\"18\"/></w:rPr><w:t>" . $x($label) . "</w:t></w:r>
+    </w:p>
+  </w:tc>
+  <w:tc>
+    <w:tcPr>
+      <w:tcW w:w=\"6000\" w:type=\"dxa\"/>
+      <w:tcBorders>
+        <w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+        <w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+      </w:tcBorders>
+    </w:tcPr>
+    <w:p><w:pPr><w:spacing w:before=\"60\" w:after=\"60\"/></w:pPr>
+      <w:r><w:rPr><w:sz w:val=\"18\"/></w:rPr><w:t xml:space=\"preserve\">" . $x($value) . "</w:t></w:r>
+    </w:p>
+  </w:tc>
+</w:tr>";
+        };
+
+        // ── Données de base ─────────────────────────────────────────────────
+        $moisLabels = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+        $code     = $d['code_questionnaire'] ?? '';
+        $raison   = $d['raison_sociale'] ?? '';
+        $cnss     = $d['numero_cnss'] ?? '';
+        $region   = $d['region_nom'] ?? '';
+        $annee    = (string)($d['annee'] ?? '');
+        $statut   = statutLabel($d['statut'] ?? '');
+        $agent    = trim(($d['agent_prenom'] ?? '') . ' ' . ($d['agent_nom'] ?? ''));
+        $campagne = $d['campagne_libelle'] ?? '';
+        $branche  = $d['branche_nom'] ?? '';
+        $natent   = $d['nationalite'] ?? '';
+        $localite = $d['localite'] ?? '';
+        $masseSal = number_format((float)($d['masse_salariale'] ?? 0), 2, ',', ' ') . ' FCFA';
+        $dateSubmit = formatDate($d['date_soumission'] ?? '');
+        $now      = date('d/m/Y à H:i');
+
+        // ── Corps du document XML ────────────────────────────────────────────
+        $body = '';
+
+        // En-tête document (bandeau bleu simulé par titre)
+        $body .= "
+<w:p>
+  <w:pPr>
+    <w:pStyle w:val=\"Title\"/>
+    <w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"1D4ED8\"/>
+    <w:spacing w:before=\"120\" w:after=\"120\"/>
+  </w:pPr>
+  <w:r>
+    <w:rPr><w:b/><w:color w:val=\"FFFFFF\"/><w:sz w:val=\"32\"/></w:rPr>
+    <w:t>e-DAMO — Déclaration de la Main d'Œuvre</w:t>
+  </w:r>
+</w:p>
+<w:p>
+  <w:pPr><w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"1E40AF\"/></w:pPr>
+  <w:r>
+    <w:rPr><w:color w:val=\"DBEAFE\"/><w:sz w:val=\"20\"/></w:rPr>
+    <w:t xml:space=\"preserve\">ANPE Niger — Exercice $annee — Campagne : $campagne</w:t>
+  </w:r>
+</w:p>
+<w:p><w:pPr><w:spacing w:after=\"120\"/></w:pPr></w:p>";
+
+        // Section 0 : Résumé
+        $body .= "<w:tbl>
+<w:tblPr>
+  <w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+  <w:tblBorders>
+    <w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+    <w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/>
+  </w:tblBorders>
+</w:tblPr>";
+        $body .= $wRow2('Code questionnaire', $code, true);
+        $body .= $wRow2('Statut', $statut);
+        $body .= $wRow2('Raison sociale', $raison);
+        $body .= $wRow2('N° CNSS', $cnss);
+        $body .= $wRow2('Région', $region);
+        $body .= $wRow2('Agent', $agent);
+        $body .= $wRow2('Date soumission', $dateSubmit);
+        $body .= "</w:tbl>
+<w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+
+        // Section 1 : Identification entreprise
+        $body .= $wSection('1. Identification de l\'entreprise');
+        $body .= "<w:tbl>
+<w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+  <w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+        $body .= $wRow2('Raison sociale', $raison);
+        $body .= $wRow2('N° CNSS', $cnss);
+        $body .= $wRow2('Branche d\'activité', $branche);
+        $body .= $wRow2('Nationalité', $natent);
+        $body .= $wRow2('Localité', $localite);
+        $body .= $wRow2('Masse salariale', $masseSal);
+        $body .= $wRow2('Adresse', $d['adresse'] ?? '');
+        $body .= $wRow2('Téléphone', $d['ent_tel'] ?? '');
+        $body .= $wRow2('Email', $d['ent_email'] ?? '');
+        $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+
+        // Section 2 : Effectifs mensuels
+        $body .= $wSection('2. Effectifs mensuels');
+        if (!empty($effectifsMensuels)) {
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Mois', 'Effectif', true);
+            foreach ($effectifsMensuels as $em) {
+                $moisLabel = $moisLabels[($em['mois'] - 1)] ?? (string)$em['mois'];
+                $body .= $wRow2($moisLabel, (string)$em['effectif']);
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        } else {
+            $body .= "<w:p><w:r><w:rPr><w:i/><w:color w:val=\"6B7280\"/></w:rPr><w:t>Aucune donnée mensuelle enregistrée.</w:t></w:r></w:p>";
+        }
+
+        // Section 3 : Effectifs par catégorie
+        $body .= $wSection('3. Effectifs par catégorie professionnelle');
+        if (!empty($categories)) {
+            // En-tête du tableau multi-colonnes
+            $mkCell = function(string $txt, string $bg = 'EFF6FF', int $w = 1100) use ($x): string {
+                return "<w:tc>
+  <w:tcPr><w:tcW w:w=\"$w\" w:type=\"dxa\"/><w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"$bg\"/>
+    <w:tcBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tcBorders>
+  </w:tcPr>
+  <w:p><w:pPr><w:spacing w:before=\"40\" w:after=\"40\"/><w:jc w:val=\"center\"/></w:pPr>
+    <w:r><w:rPr><w:b/><w:sz w:val=\"16\"/><w:color w:val=\"1E40AF\"/></w:rPr><w:t>" . $x($txt) . "</w:t></w:r>
+  </w:p>
+</w:tc>";
+            };
+            $mkDataCell = function(string $txt, int $w = 1100) use ($x): string {
+                return "<w:tc>
+  <w:tcPr><w:tcW w:w=\"$w\" w:type=\"dxa\"/>
+    <w:tcBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tcBorders>
+  </w:tcPr>
+  <w:p><w:pPr><w:spacing w:before=\"40\" w:after=\"40\"/><w:jc w:val=\"center\"/></w:pPr>
+    <w:r><w:rPr><w:sz w:val=\"16\"/></w:rPr><w:t>" . $x($txt) . "</w:t></w:r>
+  </w:p>
+</w:tc>";
+            };
+
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            // Ligne d'en-tête
+            $body .= "<w:tr>";
+            $body .= $mkCell('Catégorie', '1E40AF', 2600);
+            $body .= $mkCell('Niger. H', '1E40AF', 900);
+            $body .= $mkCell('Niger. F', '1E40AF', 900);
+            $body .= $mkCell('Afric. H', '1E40AF', 900);
+            $body .= $mkCell('Afric. F', '1E40AF', 900);
+            $body .= $mkCell('Autres H', '1E40AF', 900);
+            $body .= $mkCell('Autres F', '1E40AF', 900);
+            $body .= $mkCell('Total', '1E40AF', 1000);
+            $body .= "</w:tr>";
+
+            foreach ($categories as $cat) {
+                $catLabel = CATEGORIES_PROFESSIONNELLES[$cat['categorie']] ?? $cat['categorie'];
+                $total = ($cat['nigeriens_h'] ?? 0) + ($cat['nigeriens_f'] ?? 0)
+                       + ($cat['africains_h'] ?? 0) + ($cat['africains_f'] ?? 0)
+                       + ($cat['autres_nat_h'] ?? 0) + ($cat['autres_nat_f'] ?? 0);
+                $body .= "<w:tr>";
+                $body .= $mkDataCell($catLabel, 2600);
+                $body .= $mkDataCell((string)($cat['nigeriens_h'] ?? 0));
+                $body .= $mkDataCell((string)($cat['nigeriens_f'] ?? 0));
+                $body .= $mkDataCell((string)($cat['africains_h'] ?? 0));
+                $body .= $mkDataCell((string)($cat['africains_f'] ?? 0));
+                $body .= $mkDataCell((string)($cat['autres_nat_h'] ?? 0));
+                $body .= $mkDataCell((string)($cat['autres_nat_f'] ?? 0));
+                $body .= $mkDataCell((string)$total, 1000);
+                $body .= "</w:tr>";
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 4 : Niveaux d'instruction
+        if (!empty($niveaux)) {
+            $body .= $wSection('4. Niveaux d\'instruction');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Niveau', 'Hommes / Femmes', true);
+            foreach ($niveaux as $niv) {
+                $label = NIVEAUX_INSTRUCTION[$niv['niveau']] ?? $niv['niveau'];
+                $body .= $wRow2($label, (string)($niv['effectif_h'] ?? 0) . ' H / ' . (string)($niv['effectif_f'] ?? 0) . ' F');
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 5 : Formation professionnelle
+        if (!empty($formations)) {
+            $body .= $wSection('5. Formation professionnelle');
+            $f = $formations[0];
+            $ouiNon = !empty($f['a_eu_formation']) ? 'Oui' : 'Non';
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('A eu une formation', $ouiNon);
+            $body .= $wRow2('Qualification', $f['qualification'] ?? '');
+            $body .= $wRow2('Nature formation', $f['nature_formation'] ?? '');
+            $body .= $wRow2('Durée', $f['duree_formation'] ?? '');
+            $body .= $wRow2('Effectif', ($f['effectif_h'] ?? 0) . ' H / ' . ($f['effectif_f'] ?? 0) . ' F');
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 6 : Pertes d'emploi
+        if (!empty($pertes)) {
+            $body .= $wSection('6. Pertes d\'emploi');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Motif', 'H / F', true);
+            foreach ($pertes as $p) {
+                $label = MOTIFS_PERTE_EMPLOI[$p['motif']] ?? $p['motif'];
+                $body .= $wRow2($label, ($p['effectif_h'] ?? 0) . ' H / ' . ($p['effectif_f'] ?? 0) . ' F');
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 7 : Perspectives
+        if ($perspective) {
+            $body .= $wSection('7. Perspectives d\'emploi');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Prévisions recrutements', (string)($perspective['prevision_recrutements'] ?? 0));
+            $body .= $wRow2('Prévisions licenciements', (string)($perspective['prevision_licenciements'] ?? 0));
+            $body .= $wRow2('Commentaire', $perspective['commentaire'] ?? '');
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Section 8 : Effectifs étrangers
+        if (!empty($etrangers)) {
+            $body .= $wSection('8. Effectifs étrangers');
+            $body .= "<w:tbl><w:tblPr><w:tblW w:w=\"9000\" w:type=\"dxa\"/>
+<w:tblBorders><w:top w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:left w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:bottom w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:right w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D1D5DB\"/></w:tblBorders>
+</w:tblPr>";
+            $body .= $wRow2('Nationalité', 'H / F', true);
+            foreach ($etrangers as $et) {
+                $body .= $wRow2($et['nationalite'] ?? '', ($et['effectif_h'] ?? 0) . ' H / ' . ($et['effectif_f'] ?? 0) . ' F');
+            }
+            $body .= "</w:tbl><w:p><w:pPr><w:spacing w:after=\"200\"/></w:pPr></w:p>";
+        }
+
+        // Pied de page
+        $body .= "
+<w:p><w:pPr><w:spacing w:before=\"400\"/><w:pBdr><w:top w:val=\"single\" w:sz=\"4\" w:color=\"E5E7EB\"/></w:pBdr><w:jc w:val=\"center\"/></w:pPr>
+  <w:r><w:rPr><w:color w:val=\"6B7280\"/><w:sz w:val=\"16\"/></w:rPr>
+    <w:t xml:space=\"preserve\">Document généré le $now par e-DAMO — ANPE Niger | Réf. : " . $x($code) . "</w:t>
+  </w:r>
+</w:p>";
+
+        // ── Assemblage du document Word (Open XML) ───────────────────────────
+
+        // [Content_Types].xml
+        $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml"  ContentType="application/xml"/>
+  <Override PartName="/word/document.xml"
+    ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml"
+    ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/settings.xml"
+    ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+</Types>';
+
+        // _rels/.rels
+        $rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
+    Target="word/document.xml"/>
+</Relationships>';
+
+        // word/_rels/document.xml.rels
+        $docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"
+    Target="styles.xml"/>
+  <Relationship Id="rId2"
+    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
+    Target="settings.xml"/>
+</Relationships>';
+
+        // word/settings.xml
+        $settings = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:defaultTabStop w:val="720"/>
+  <w:compat>
+    <w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>
+  </w:compat>
+</w:settings>';
+
+        // word/styles.xml (styles minimaux)
+        $styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+          xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:docDefaults>
+    <w:rPrDefault>
+      <w:rPr>
+        <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
+        <w:sz w:val="20"/>
+        <w:szCs w:val="20"/>
+        <w:lang w:val="fr-FR"/>
+      </w:rPr>
+    </w:rPrDefault>
+    <w:pPrDefault>
+      <w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr>
+    </w:pPrDefault>
+  </w:docDefaults>
+  <w:style w:type="paragraph" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:name w:val="Title"/>
+    <w:pPr>
+      <w:spacing w:before="0" w:after="80"/>
+      <w:shd w:val="clear" w:color="auto" w:fill="1D4ED8"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:rPr>
+      <w:b/><w:color w:val="FFFFFF"/><w:sz w:val="32"/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading2">
+    <w:name w:val="heading 2"/>
+    <w:pPr>
+      <w:spacing w:before="240" w:after="120"/>
+      <w:shd w:val="clear" w:color="auto" w:fill="EFF6FF"/>
+    </w:pPr>
+    <w:rPr>
+      <w:b/><w:color w:val="1E40AF"/><w:sz w:val="24"/>
+    </w:rPr>
+  </w:style>
+</w:styles>';
+
+        // word/document.xml
+        $document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
+            xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    ' . $body . '
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"
+               w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>';
+
+        // ── Création de l'archive ZIP (.docx) en mémoire ─────────────────────
+        $tmpFile = tempnam(sys_get_temp_dir(), 'edamo_docx_');
+        $zip = new \ZipArchive();
+        if ($zip->open($tmpFile, \ZipArchive::OVERWRITE) !== true) {
+            // Fallback HTML si ZipArchive indisponible
+            return $this->generatePdfHtml(
+                $d, $effectifsMensuels, $categories,
+                $niveaux, $formations, $pertes,
+                $perspective, $etrangers
+            );
+        }
+        $zip->addFromString('[Content_Types].xml',         $contentTypes);
+        $zip->addFromString('_rels/.rels',                  $rels);
+        $zip->addFromString('word/document.xml',            $document);
+        $zip->addFromString('word/styles.xml',              $styles);
+        $zip->addFromString('word/settings.xml',            $settings);
+        $zip->addFromString('word/_rels/document.xml.rels', $docRels);
+        $zip->close();
+
+        $content = file_get_contents($tmpFile);
+        unlink($tmpFile);
+
+        return $content;
+    }
+
+    /**
+     * Générer le HTML du rapport PDF (conservé pour référence interne)
      */
     private function generatePdfHtml(
         array $d, array $effectifsMensuels, array $categories,
@@ -1336,10 +1790,11 @@ HTML;
 
             try {
                 $this->db->insert(
-                    "INSERT INTO entreprises (raison_sociale, numero_cnss, telephone, email,
+                    "INSERT INTO entreprises (uuid, raison_sociale, numero_cnss, telephone, email,
                      activite_principale, nationalite, localite, region_id, actif, created_by)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)",
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10)",
                     [
+                        generateUuid(),
                         $raisonSociale,
                         $numeroCnss ?: null,
                         $telephone ?: null,
@@ -1635,5 +2090,229 @@ HTML;
             error_log('Erreur retour brouillon: ' . $e->getMessage());
             redirectWith("admin/declaration/$id", 'error', 'Erreur lors du retour en brouillon.');
         }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CAMPAGNES — FALLBACK GET (évite les 404 Apache si URL tapée directement)
+    ═══════════════════════════════════════════════════════════════ */
+
+    /**
+     * GET /admin/campagne/:id/cloturer — Redirige vers la liste avec message
+     */
+    public function cloturerCampagneGet(string $id): void
+    {
+        redirectWith('admin/campagnes', 'warning', 'Utilisez le bouton "Clôturer" sur la page des campagnes.');
+    }
+
+    /**
+     * GET /admin/campagne/:id/ouvrir — Redirige vers la liste avec message
+     */
+    public function ouvrirCampagneGet(string $id): void
+    {
+        redirectWith('admin/campagnes', 'warning', 'Utilisez le bouton "Réouvrir" sur la page des campagnes.');
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BRANCHES D'ACTIVITÉ — CRUD COMPLET
+    ═══════════════════════════════════════════════════════════════ */
+
+    /**
+     * Formulaire création d'une branche
+     * GET /admin/branche/nouvelle
+     */
+    public function nouvelleBranche(): void
+    {
+        $this->render('admin.branche_form', [
+            'pageTitle' => "Nouvelle branche d'activité - " . APP_NAME,
+            'mode'      => 'create',
+            'branche'   => null,
+            'breadcrumbs' => [
+                ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                ['label' => 'Nouvelle branche', 'url' => false],
+            ],
+        ]);
+    }
+
+    /**
+     * Créer une nouvelle branche
+     * POST /admin/branche/nouvelle
+     */
+    public function creerBranche(): void
+    {
+        $this->requireCsrf();
+        $code        = strtoupper(trim(sanitize(post('code', ''))));
+        $libelle     = sanitize(post('libelle', ''));
+        $description = sanitize(post('description', ''));
+        $actif       = post('actif', '1') === '1' ? 1 : 0;
+
+        $errors = [];
+        if (!$code)    $errors['code']    = 'Le code est obligatoire.';
+        if (!$libelle) $errors['libelle'] = 'Le libellé est obligatoire.';
+        if ($code && strlen($code) > 10) $errors['code'] = 'Le code ne doit pas dépasser 10 caractères.';
+
+        if (!empty($errors)) {
+            $this->render('admin.branche_form', [
+                'pageTitle' => "Nouvelle branche d'activité - " . APP_NAME,
+                'mode'      => 'create',
+                'branche'   => null,
+                'errors'    => $errors,
+                'old'       => compact('code', 'libelle', 'description', 'actif'),
+                'breadcrumbs' => [
+                    ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                    ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                    ['label' => 'Nouvelle branche', 'url' => false],
+                ],
+            ]);
+            return;
+        }
+
+        $exists = $this->db->fetchScalar("SELECT id FROM branches_activite WHERE code = $1", [$code]);
+        if ($exists) {
+            $this->render('admin.branche_form', [
+                'pageTitle' => "Nouvelle branche d'activité - " . APP_NAME,
+                'mode'      => 'create',
+                'branche'   => null,
+                'errors'    => ['code' => "Le code \"$code\" est déjà utilisé."],
+                'old'       => compact('code', 'libelle', 'description', 'actif'),
+                'breadcrumbs' => [
+                    ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                    ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                    ['label' => 'Nouvelle branche', 'url' => false],
+                ],
+            ]);
+            return;
+        }
+
+        $this->db->insert(
+            "INSERT INTO branches_activite (code, libelle, description, actif) VALUES ($1, $2, $3, $4)",
+            [$code, $libelle, $description ?: null, $actif]
+        );
+        logActivity('branch_created', 'branches_activite', 0, ['code' => $code, 'libelle' => $libelle]);
+        redirectWith('admin/branches', 'success', "Branche \"$libelle\" créée avec succès.");
+    }
+
+    /**
+     * Formulaire modification d'une branche
+     * GET /admin/branche/:id/modifier
+     */
+    public function modifierBranche(string $id): void
+    {
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        $this->render('admin.branche_form', [
+            'pageTitle' => "Modifier la branche - " . APP_NAME,
+            'mode'      => 'edit',
+            'branche'   => $branche,
+            'breadcrumbs' => [
+                ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                ['label' => 'Modifier', 'url' => false],
+            ],
+        ]);
+    }
+
+    /**
+     * Mettre à jour une branche
+     * POST /admin/branche/:id/modifier
+     */
+    public function updateBranche(string $id): void
+    {
+        $this->requireCsrf();
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        $code        = strtoupper(trim(sanitize(post('code', ''))));
+        $libelle     = sanitize(post('libelle', ''));
+        $description = sanitize(post('description', ''));
+        $actif       = post('actif', '1') === '1' ? 1 : 0;
+
+        $errors = [];
+        if (!$code)    $errors['code']    = 'Le code est obligatoire.';
+        if (!$libelle) $errors['libelle'] = 'Le libellé est obligatoire.';
+        if ($code && strlen($code) > 10) $errors['code'] = 'Le code ne doit pas dépasser 10 caractères.';
+
+        // Vérifier unicité code (excluant la branche elle-même)
+        $existant = $this->db->fetchScalar(
+            "SELECT id FROM branches_activite WHERE code = $1 AND id != $2",
+            [$code, (int)$id]
+        );
+        if ($existant) $errors['code'] = "Le code \"$code\" est déjà utilisé par une autre branche.";
+
+        if (!empty($errors)) {
+            $this->render('admin.branche_form', [
+                'pageTitle' => "Modifier la branche - " . APP_NAME,
+                'mode'      => 'edit',
+                'branche'   => $branche,
+                'errors'    => $errors,
+                'old'       => compact('code', 'libelle', 'description', 'actif'),
+                'breadcrumbs' => [
+                    ['label' => 'Tableau de bord', 'url' => '/admin/dashboard'],
+                    ['label' => "Branches d'activité", 'url' => '/admin/branches'],
+                    ['label' => 'Modifier', 'url' => false],
+                ],
+            ]);
+            return;
+        }
+
+        $this->db->execute(
+            "UPDATE branches_activite SET code=$1, libelle=$2, description=$3, actif=$4 WHERE id=$5",
+            [$code, $libelle, $description ?: null, $actif, (int)$id]
+        );
+        logActivity('branch_updated', 'branches_activite', (int)$id, ['code' => $code]);
+        redirectWith('admin/branches', 'success', "Branche \"$libelle\" mise à jour.");
+    }
+
+    /**
+     * Supprimer une branche
+     * POST /admin/branche/:id/supprimer
+     */
+    public function supprimerBranche(string $id): void
+    {
+        $this->requireCsrf();
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        // Vérifier si la branche est utilisée
+        $usage = (int) $this->db->fetchScalar(
+            "SELECT COUNT(*) FROM entreprises WHERE branche_id = $1",
+            [(int)$id]
+        );
+        if ($usage > 0) {
+            redirectWith('admin/branches', 'error', "Impossible de supprimer : cette branche est utilisée par $usage entreprise(s).");
+        }
+
+        $this->db->execute("DELETE FROM branches_activite WHERE id = $1", [(int)$id]);
+        logActivity('branch_deleted', 'branches_activite', (int)$id, ['code' => $branche['code']]);
+        redirectWith('admin/branches', 'success', "Branche \"{$branche['libelle']}\" supprimée.");
+    }
+
+    /**
+     * Activer/Désactiver une branche (toggle)
+     * POST /admin/branche/:id/toggle
+     */
+    public function toggleBranche(string $id): void
+    {
+        $this->requireCsrf();
+        $branche = $this->db->fetchOne("SELECT * FROM branches_activite WHERE id = $1", [(int)$id]);
+        if (!$branche) {
+            redirectWith('admin/branches', 'error', 'Branche introuvable.');
+        }
+
+        $newActif = $branche['actif'] ? 0 : 1;
+        $this->db->execute(
+            "UPDATE branches_activite SET actif = $1 WHERE id = $2",
+            [$newActif, (int)$id]
+        );
+        $statut = $newActif ? 'activée' : 'désactivée';
+        logActivity('branch_toggled', 'branches_activite', (int)$id, ['actif' => $newActif]);
+        redirectWith('admin/branches', 'success', "Branche \"{$branche['libelle']}\" $statut.");
     }
 }

@@ -48,17 +48,19 @@ if (!headers_sent()) {
     if (APP_ENV === 'production') {
         header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
     }
-    // CSP - autoriser Bootstrap CDN + notre domaine
+    // CSP - compatible VPS/Plesk + XAMPP local
+    // Permet : assets locaux, fonts Google, Bootstrap CDN, data URIs
     $csp = implode('; ', [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
-        "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com data:",
-        "img-src 'self' data: blob:",
-        "connect-src 'self'",
+        "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com data: blob:",
+        "img-src 'self' data: blob: https:",
+        "connect-src 'self' https:",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",
+        "worker-src 'self' blob:",
     ]);
     header("Content-Security-Policy: $csp");
 }

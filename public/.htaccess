@@ -1,24 +1,20 @@
 # ==============================================================================
-# e-DAMO — .htaccess PUBLIC (anpe_DAMO/public/)
+# e-DAMO — .htaccess PUBLIC (public/)
 # ==============================================================================
 #
 # Ce fichier gère le routage dans le dossier public/.
-# Il est universel : fonctionne sur XAMPP Windows ET Apache Linux.
+# Compatible : XAMPP Windows, Apache Linux, Plesk VPS, VirtualHost dédié.
 #
-# IMPORTANT : RewriteBase est calculée automatiquement par PHP (config.php).
-#             Ici on n'a PAS besoin de la changer selon l'installation.
-#
-# Scénario XAMPP sous-dossier :
-#   URL : http://localhost:8085/anpe_DAMO/login
-#   SCRIPT_NAME : /anpe_DAMO/public/index.php
-#   REQUEST_URI : /anpe_DAMO/public/login  (après réécriture racine)
-#   → BASE_PATH détecté = /anpe_DAMO   → route = /login  ✓
-#
-# Scénario VirtualHost (DocumentRoot = .../anpe_DAMO/public) :
-#   URL : https://edamo.anpe-niger.ne/login
+# Scénario VPS/Plesk VirtualHost (DocumentRoot = .../public) :
+#   URL : https://affectionate-lumiere.217-154-60-93.plesk.page/login
 #   SCRIPT_NAME : /index.php
 #   REQUEST_URI : /login
-#   → BASE_PATH détecté = ''           → route = /login  ✓
+#   → BASE_PATH détecté = ''  → route = /login  ✓
+#
+# Scénario XAMPP sous-dossier (htdocs/anpe_DAMO/) :
+#   URL : http://localhost:8085/anpe_DAMO/login
+#   SCRIPT_NAME : /anpe_DAMO/public/index.php
+#   → BASE_PATH détecté = /anpe_DAMO  ✓
 # ==============================================================================
 
 Options -Indexes
@@ -33,7 +29,7 @@ ServerSignature Off
     RewriteRule ^composer\.(json|lock)$  - [F,L]
 
     # ── Bloquer les user-agents malveillants ───────────────────────────────────
-    RewriteCond %{HTTP_USER_AGENT} (nikto|sqlmap|masscan|nmap|python-requests) [NC]
+    RewriteCond %{HTTP_USER_AGENT} (nikto|sqlmap|masscan|nmap) [NC]
     RewriteRule ^ - [F,L]
 
     # ── Laisser passer les fichiers et dossiers existants (CSS, JS, images…) ───
@@ -45,25 +41,29 @@ ServerSignature Off
     RewriteRule ^ index.php [QSA,L]
 </IfModule>
 
-# ── En-têtes de sécurité ────────────────────────────────────────────────────
+# ── Types MIME (CRITIQUE pour que Bootstrap Icons et fonts fonctionnent) ──────
+<IfModule mod_mime.c>
+    AddType font/woff2        .woff2
+    AddType font/woff         .woff
+    AddType font/ttf          .ttf
+    AddType image/svg+xml     .svg
+    AddType text/css          .css
+    AddType application/javascript .js
+    AddType application/json  .json
+</IfModule>
+
+# ── En-têtes de sécurité (compatibles Plesk — sans directives problématiques) ─
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options  "nosniff"
     Header always set X-Frame-Options         "SAMEORIGIN"
-    Header always set X-XSS-Protection        "1; mode=block"
     Header always set Referrer-Policy         "strict-origin-when-cross-origin"
-</IfModule>
-
-# ── Types MIME pour les polices Bootstrap Icons ─────────────────────────────
-<IfModule mod_mime.c>
-    AddType font/woff2  .woff2
-    AddType font/woff   .woff
-    AddType font/ttf    .ttf
-    AddType image/svg+xml .svg
+    # Autoriser le chargement des polices Bootstrap depuis le même domaine
+    Header always set Access-Control-Allow-Origin "*" env=IS_FONT
 </IfModule>
 
 # ── Compression GZIP ────────────────────────────────────────────────────────
 <IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json font/woff2
+    AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript application/json font/woff2
 </IfModule>
 
 # ── Cache navigateur pour les assets statiques ──────────────────────────────
