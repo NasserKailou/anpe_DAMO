@@ -90,6 +90,33 @@ class Database
         $sql = preg_replace('/\bTRUE\b/', '1', $sql);
         $sql = preg_replace('/\bFALSE\b/', '0', $sql);
 
+        // NULLS LAST → ORDER BY ISNULL(col), col DESC
+        // Forme : ORDER BY col DESC NULLS LAST  →  ORDER BY (col IS NULL) ASC, col DESC
+        $sql = preg_replace_callback(
+            '/ORDER\s+BY\s+([\w.]+)\s+(ASC|DESC)\s+NULLS\s+(LAST|FIRST)/i',
+            function($m) {
+                $col   = $m[1];
+                $dir   = strtoupper($m[2]);
+                $nulls = strtoupper($m[3]);
+                // NULLS LAST  → nulls en fin  → IS NULL ASC
+                // NULLS FIRST → nulls en tête → IS NULL DESC
+                $nullDir = ($nulls === 'LAST') ? 'ASC' : 'DESC';
+                return "ORDER BY ($col IS NULL) $nullDir, $col $dir";
+            },
+            $sql
+        );
+        // Forme sans direction explicite : col NULLS LAST
+        $sql = preg_replace_callback(
+            '/ORDER\s+BY\s+([\w.]+)\s+NULLS\s+(LAST|FIRST)/i',
+            function($m) {
+                $col     = $m[1];
+                $nulls   = strtoupper($m[2]);
+                $nullDir = ($nulls === 'LAST') ? 'ASC' : 'DESC';
+                return "ORDER BY ($col IS NULL) $nullDir, $col ASC";
+            },
+            $sql
+        );
+
         // Supprimer RETURNING id (MySQL utilise lastInsertId)
         $sql = preg_replace('/\s+RETURNING\s+\w+\s*$/i', '', $sql);
 

@@ -1113,8 +1113,6 @@ class AdminController extends BaseController
         exit;
     }
 
-    }
-
     /**
      * Générer un fichier .docx (Open XML / WordprocessingML) sans librairie externe
      * Compatible Microsoft Word 2007+, LibreOffice Writer, Google Docs

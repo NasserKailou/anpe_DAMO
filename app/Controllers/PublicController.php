@@ -110,7 +110,7 @@ class PublicController extends BaseController
              LEFT JOIN declarations d ON d.region_id = r.id AND d.campagne_id = $1 AND d.statut = 'validee'
              LEFT JOIN declaration_categories_effectifs dc ON dc.declaration_id = d.id
              GROUP BY r.id, r.nom
-             ORDER BY total_emplois DESC NULLS LAST",
+             ORDER BY (total_emplois IS NULL) ASC, total_emplois DESC",
             [$campagneId]
         );
 
@@ -264,9 +264,17 @@ class PublicController extends BaseController
             [(int) $id]
         );
 
-        $filePath = PUBLIC_PATH . $guide['fichier_path'];
+        $filePath = rtrim(PUBLIC_PATH, '/') . '/' . ltrim($guide['fichier_path'], '/');
         if (!file_exists($filePath)) {
+            // Fichier PDF non disponible : afficher une page d'erreur propre
             http_response_code(404);
+            echo '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Fichier non disponible</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"></head>
+<body class="bg-light d-flex align-items-center justify-content-center" style="min-height:100vh">
+<div class="text-center p-5"><h1 class="display-1 text-warning">404</h1>
+<h2>Fichier non disponible</h2>
+<p class="text-muted">Le guide "<strong>' . htmlspecialchars($guide['titre']) . '</strong>" n\'est pas encore disponible en téléchargement.</p>
+<a href="/guides" class="btn btn-primary">Retour aux guides</a></div></body></html>';
             exit;
         }
 
