@@ -2,7 +2,13 @@
 /**
  * e-DAMO - Configuration principale
  * ANPE Niger - Plateforme Digitale de Déclaration Annuelle de la Main d'Œuvre
+ *
+ * Guard anti-double-inclusion : si APP_NAME est déjà défini, on sort immédiatement.
+ * Cela couvre le cas XAMPP où index.php racine → public/index.php → config.php (2x).
  */
+if (defined('APP_NAME')) {
+    return; // Déjà chargé, rien à faire
+}
 
 // Charger les variables d'environnement
 $envFile = dirname(__DIR__) . '/.env';
@@ -36,60 +42,55 @@ define('APP_URL',         getenv('APP_URL') ?: 'http://localhost');
 //
 // CAS 1 — XAMPP sous-dossier (htdocs/anpe_DAMO/)
 //   URL : http://localhost:8085/anpe_DAMO/login
-//   SCRIPT_NAME : /anpe_DAMO/public/index.php
+//   SCRIPT_NAME : /anpe_DAMO/index.php  OU  /anpe_DAMO/public/index.php
 //   → BASE_PATH : /anpe_DAMO
 //
 // CAS 2 — VPS/Plesk VirtualHost (DocumentRoot = .../anpe_DAMO/public)
-//   URL : https://mondomaine.example.com/login
+//   URL : https://affectionate-lumiere.217-154-60-93.plesk.page/login
 //   SCRIPT_NAME : /index.php
 //   → BASE_PATH : ''
 //
 // Forçage possible via variable d'environnement APP_BASE_PATH dans .env
 // ─────────────────────────────────────────────────────────────────────────────
-(function () {
+if (!defined('BASE_PATH')) {
     // Permettre un override manuel via .env (ex: APP_BASE_PATH=/anpe_DAMO)
     $forced = getenv('APP_BASE_PATH');
-    if ($forced !== false) {
+    if ($forced !== false && $forced !== '') {
         define('BASE_PATH', rtrim($forced, '/'));
-        return;
+    } else {
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
+
+        // ── Étape 1 : répertoire de index.php
+        $scriptDir = rtrim(dirname($scriptName), '/\\');
+        if ($scriptDir === '.' || $scriptDir === '') $scriptDir = '';
+
+        // ── Étape 2 : enlever le segment '/public' final si présent
+        //    /anpe_DAMO/public → /anpe_DAMO
+        //    /public           → ''
+        if ($scriptDir === '/public' || str_ends_with($scriptDir, '/public')) {
+            $scriptDir = rtrim(substr($scriptDir, 0, -strlen('/public')), '/\\');
+        }
+
+        $base = rtrim($scriptDir, '/');
+
+        // Sanity check : doit être '' ou commencer par '/'
+        if ($base !== '' && !str_starts_with($base, '/')) {
+            $base = '';
+        }
+
+        define('BASE_PATH', $base);
     }
-
-    $scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
-
-    // ── Étape 1 : répertoire de index.php
-    $scriptDir = rtrim(dirname($scriptName), '/\\');
-    if ($scriptDir === '.' || $scriptDir === '') $scriptDir = '';
-
-    // ── Étape 2 : enlever le segment '/public' final si présent
-    //    /anpe_DAMO/public → /anpe_DAMO
-    //    /public           → ''
-    if ($scriptDir === '/public' || str_ends_with($scriptDir, '/public')) {
-        $scriptDir = rtrim(substr($scriptDir, 0, -strlen('/public')), '/\\');
-    }
-
-    $base = rtrim($scriptDir, '/');
-
-    // Sanity check : doit être '' ou commencer par '/'
-    if ($base !== '' && !str_starts_with($base, '/')) {
-        $base = '';
-    }
-
-    define('BASE_PATH', $base);
-})();
-
-    define('BASE_PATH', $base);
-})();
-define('APP_KEY',         getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');
-define('APP_TIMEZONE',    'Africa/Niamey');
+}
+if (!defined('APP_KEY'))      define('APP_KEY',      getenv('APP_KEY') ?: 'changeme_32_chars_secret_key_here');define('APP_TIMEZONE',    'Africa/Niamey');
 define('APP_LOCALE',      'fr_FR');
 
-// ===== CONFIGURATION BASE DE DONNÉES =====
+// ===== CONFIGURATION BASE DE DONNÉES (MySQL) =====
 define('DB_HOST',     getenv('DB_HOST') ?: '127.0.0.1');
-define('DB_PORT',     getenv('DB_PORT') ?: '5432');
+define('DB_PORT',     getenv('DB_PORT') ?: '3306');
 define('DB_NAME',     getenv('DB_NAME') ?: 'edamo');
-define('DB_USER',     getenv('DB_USER') ?: 'postgres');
-define('DB_PASS',     getenv('DB_PASS') ?: 'admin');
-define('DB_SCHEMA',   getenv('DB_SCHEMA') ?: 'public');
+define('DB_USER',     getenv('DB_USER') ?: 'root');
+define('DB_PASS',     getenv('DB_PASS') ?: '');
+define('DB_SCHEMA',   ''); // Non utilisé avec MySQL
 
 // ===== CONFIGURATION SESSION =====
 define('SESSION_NAME',     'EDAMO_SESSION');
